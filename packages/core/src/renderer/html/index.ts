@@ -206,21 +206,38 @@ ${slidesHtml}
 
   <!-- DOK Control bar -->
   <div class="dokContainer">
-    <button id="dokPrev" class="dokBtn" title="Previous Slide">
+    <button id="dokPrev" class="dokBtn" title="Previous Slide (&larr;)">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
     </button>
     <span id="dokCounter" class="dokCounter">1 / 1</span>
-    <button id="dokNext" class="dokBtn" title="Next Slide">
+    <button id="dokNext" class="dokBtn" title="Next Slide (Space / &rarr;)">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
     </button>
 
-    <button id="dokPresenter" class="dokBtn" title="Monitor">
+    <button id="dokPresenter" class="dokBtn" title="Presenter Console (P)">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
     </button>
     
-    <button id="dokFullscreen" class="dokBtn" title="Toggle Fullscreen (F)">
+    <button id="dokFullscreen" class="dokBtn" title="Fullscreen (F)">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
     </button>
+  </div>
+
+  <!-- Keyboard Shortcut Help Modal -->
+  <div id="helpModal" class="helpModal">
+    <div class="helpModalContent">
+      <div class="helpModalHeader">
+        <h3>Keyboard Shortcuts</h3>
+        <button id="closeHelpModal" class="closeHelpModalBtn">&times;</button>
+      </div>
+      <div class="helpModalBody">
+        <div class="shortcutRow"><span><span class="key">Space</span> / <span class="key">&rarr;</span></span><span>Next Slide / Fragment</span></div>
+        <div class="shortcutRow"><span><span class="key">&larr;</span></span><span>Previous Slide / Fragment</span></div>
+        <div class="shortcutRow"><span><span class="key">F</span></span><span>Toggle Fullscreen</span></div>
+        <div class="shortcutRow"><span><span class="key">P</span></span><span>Toggle Presenter Console</span></div>
+        <div class="shortcutRow"><span><span class="key">?</span></span><span>Show / Hide Shortcut Guide</span></div>
+      </div>
+    </div>
   </div>
 
   <script src="${urls.prismCoreJs}"></script>

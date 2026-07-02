@@ -96,6 +96,8 @@ export const script = `
   const btnNext = document.getElementById('dokNext');
   const btnFullscreen = document.getElementById('dokFullscreen');
   const btnPresenter = document.getElementById('dokPresenter');
+  const helpModal = document.getElementById('helpModal');
+  const btnCloseHelp = document.getElementById('closeHelpModal');
 
   let current = 0;
   let presenterWindow = null;
@@ -209,14 +211,59 @@ export const script = `
 
   // Hndler of the full screen toggle
   function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(function (err) {
-        console.error('Error enabling fullscreen:', err);
-      });
+    const docEl = document.documentElement;
+    const requestFs = docEl.requestFullscreen || 
+                      docEl.webkitRequestFullscreen || 
+                      docEl.mozRequestFullScreen || 
+                      docEl.msRequestFullscreen;
+                      
+    const exitFs = document.exitFullscreen || 
+                   document.webkitExitFullscreen || 
+                   document.mozCancelFullScreen || 
+                   document.msExitFullscreen;
+                   
+    const fsElement = document.fullscreenElement || 
+                      document.webkitFullscreenElement || 
+                      document.mozFullScreenElement || 
+                      document.msFullscreenElement;
+
+    if (!fsElement) {
+      if (requestFs) {
+        try {
+          const promise = requestFs.call(docEl);
+          if (promise && typeof promise.catch === 'function') {
+            promise.catch(function (err) {
+              console.error('Error enabling fullscreen:', err);
+            });
+          }
+        } catch (err) {
+          console.error('Error enabling fullscreen:', err);
+        }
+      }
     } else {
-      document.exitFullscreen();
+      if (exitFs) {
+        exitFs.call(document);
+      }
     }
   }
+
+  function onFullscreenChange() {
+    const fsElement = document.fullscreenElement || 
+                      document.webkitFullscreenElement || 
+                      document.mozFullScreenElement || 
+                      document.msFullscreenElement;
+    if (fsElement) {
+      document.body.classList.add('mdslide-fullscreen');
+    } else {
+      document.body.classList.remove('mdslide-fullscreen');
+    }
+    resizeDeck();
+  }
+
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  document.addEventListener('mozfullscreenchange', onFullscreenChange);
+  document.addEventListener('MSFullscreenChange', onFullscreenChange);
 
   // Handler of presenter window toggling
   function togglePresenterWindow() {
@@ -357,14 +404,28 @@ export const script = `
       toggleFullscreen();
     } else if (e.key === 'p' || e.key === 'P') {
       togglePresenterWindow();
+    } else if (e.key === '?') {
+      toggleHelp();
     }
   });
+
+  function toggleHelp() {
+    if (helpModal) {
+      helpModal.classList.toggle('visible');
+    }
+  }
 
   // Floating DOK Display Vislibility on Mouse Move
   if (btnPrev) btnPrev.addEventListener('click', triggerPrev);
   if (btnNext) btnNext.addEventListener('click', triggerNext);
   if (btnFullscreen) btnFullscreen.addEventListener('click', toggleFullscreen);
   if (btnPresenter) btnPresenter.addEventListener('click', togglePresenterWindow);
+  if (btnCloseHelp) btnCloseHelp.addEventListener('click', toggleHelp);
+  if (helpModal) {
+    helpModal.addEventListener('click', function (e) {
+      if (e.target === helpModal) toggleHelp();
+    });
+  }
 
   // Floating DOK Display Visibility on Mouse Move
   let hudTimeout;
