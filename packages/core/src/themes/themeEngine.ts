@@ -235,7 +235,7 @@ body {
   font-size: var(--li-size, 1.3rem);
   line-height: 1.6;
   margin-bottom: 0.8rem;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease, opacity 0.3s ease;
 }
 
 .slideContent li:hover {
