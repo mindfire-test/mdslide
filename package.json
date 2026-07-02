@@ -18,7 +18,9 @@
     "e2e:open": "start-server-and-test 'bun packages/cli/dist/cli.js watch presentation-e2e.md --port 3030' http://localhost:3030 'cypress open'",
     "version": "changeset version",
     "release": "bun run build && bun run scripts/publishHelper.ts --publish",
-    "changeset": "changeset"
+    "changeset": "changeset",
+    "docs:build": "bun run --cwd mdslide-docs build",
+    "docs:start": "bun run --cwd mdslide-docs start"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

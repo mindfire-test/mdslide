@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500;600&display=swap');
+@import 'tailwindcss/theme';
+@import 'tailwindcss/utilities';
+
+@theme {
+  --color-primary: var(--ifm-color-primary);
+  --color-primary-dark: var(--ifm-color-primary-dark);
+  --color-primary-lighter: var(--ifm-color-primary-lighter);
+
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-border: var(--app-border);
+  --color-app-text-primary: var(--app-text-primary);
+  --color-app-text-secondary: var(--app-text-secondary);
+  --color-app-accent: var(--app-accent);
+  --color-accent-gradient-end: var(--accent-gradient-end);
+
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --animate-cursor-blink: cursor-blink 1s infinite step-end;
+  --animate-shimmer: shimmer 2s infinite linear;
+
+  @keyframes cursor-blink {
+    from,
+    to {
+      border-color: transparent;
+    }
+
+    50% {
+      border-color: currentColor;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+:root {
+  --ifm-color-primary: #d63b2f;
+  --ifm-color-primary-dark: #b82d22;
+  --ifm-color-primary-darker: #9e2319;
+  --ifm-color-primary-darkest: #5c0f0a;
+  --ifm-color-primary-light: #e44f43;
+  --ifm-color-primary-lighter: #ec6d62;
+  --ifm-color-primary-lightest: #f38f87;
+
+  --app-bg: #f7f6f3;
+  --app-surface: #efede8;
+  --app-border: rgba(0, 0, 0, 0.07);
+  --app-text-primary: #1a1a18;
+  --app-text-secondary: #6b6b63;
+  --app-accent: #d63b2f;
+  --accent-gradient-end: #ec6d62;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #4f7fd4;
+  --ifm-color-primary-dark: #3764b8;
+  --ifm-color-primary-darker: #2d529b;
+  --ifm-color-primary-darkest: #1a3261;
+  --ifm-color-primary-light: #6a96e6;
+  --ifm-color-primary-lighter: #83a9f0;
+  --ifm-color-primary-lightest: #adc5f7;
+
+  --ifm-background-color: #0e0e0d;
+  --ifm-background-flat-color: #161614;
+
+  --app-bg: #0e0e0d;
+  --app-surface: #161614;
+  --app-border: rgba(255, 255, 255, 0.07);
+  --app-text-primary: #f0efe9;
+  --app-text-secondary: #7a7a72;
+  --app-accent: #4f7fd4;
+  --accent-gradient-end: #83a9f0;
+}
+
+body.homepage-active * {
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+body.homepage-active .navbar,
+body.homepage-active footer.footer {
+  display: none !important;
+}
+
+@utility shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    var(--app-border) 25%,
+    var(--app-surface) 50%,
+    var(--app-border) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+[data-theme='dark'] .shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
