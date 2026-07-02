@@ -72,8 +72,8 @@ export const script = `
 
     const width = 1920;
     const height = 1080;
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+    const windowHeight = window.innerHeight || document.documentElement.clientHeight;
 
     const scale = Math.min(windowWidth / width, windowHeight / height);
 
@@ -145,6 +145,17 @@ export const script = `
     // Update activeFragments for the current slide
     const currentSlide = slides[index];
     if (currentSlide) {
+      // Sync body background image with current slide for seamless fullscreen coverage
+      const bgImg = currentSlide.style.backgroundImage;
+      if (bgImg) {
+        document.body.style.backgroundImage = bgImg;
+        document.body.style.backgroundSize = 'cover';
+        document.body.style.backgroundPosition = 'center';
+        document.body.style.backgroundRepeat = 'no-repeat';
+      } else {
+        document.body.style.backgroundImage = '';
+      }
+
       activeFragments = Array.from(currentSlide.querySelectorAll('.fragment'));
       if (direction === 'forward') {
         activeFragments.forEach(function (f) { f.classList.remove('visible'); });
@@ -256,8 +267,15 @@ export const script = `
       document.body.classList.add('mdslide-fullscreen');
     } else {
       document.body.classList.remove('mdslide-fullscreen');
+      document.body.style.backgroundImage = '';
     }
     resizeDeck();
+    
+    // Multiple timeouts to handle animated fullscreen transitions (especially on macOS)
+    setTimeout(resizeDeck, 100);
+    setTimeout(resizeDeck, 300);
+    setTimeout(resizeDeck, 600);
+    setTimeout(resizeDeck, 1000);
   }
 
   document.addEventListener('fullscreenchange', onFullscreenChange);

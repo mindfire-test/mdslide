@@ -11,14 +11,16 @@ export class ThemeEngine {
 
 html {
   font-size: 20px;
+  height: 100%;
+  width: 100%;
 }
 
 body {
   font-family: var(--slide-font, 'Inter', system-ui, sans-serif);
   background: var(--slide-bg);
   color: var(--slide-text);
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -816,7 +818,7 @@ body.showDok .dokContainer,
 
 /* Fullscreen mode styling */
 body.mdslide-fullscreen {
-  background: #000000 !important;
+  background-color: var(--slide-bg);
 }
 
 body.mdslide-fullscreen .deck {
