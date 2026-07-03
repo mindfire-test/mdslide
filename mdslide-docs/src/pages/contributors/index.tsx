@@ -3,6 +3,8 @@ import Layout from '@theme/Layout';
 import type { GHContributor, ContributorDetail } from '@site/src/types';
 import ContributorCard from '@site/src/components/contributors/ContributorCard';
 import SkeletonCard from '@site/src/components/contributors/SkeletonCard';
+import { fetchAllContributors } from '@site/src/utils/github';
+import { GITHUB_API_BASE } from '@site/src/constants/github';
 
 export default function Contributors(): React.ReactElement {
   const [contributors, setContributors] = useState<GHContributor[]>([]);
@@ -14,9 +16,7 @@ export default function Contributors(): React.ReactElement {
   useEffect(() => {
     async function loadContributors() {
       try {
-        const r = await fetch('https://api.github.com/repos/mindfiredigital/mdslide/contributors?per_page=100');
-        if (!r.ok) throw new Error(`GitHub API responded with ${r.status}`);
-        const data: GHContributor[] = await r.json();
+        const data = await fetchAllContributors();
         const humans = data.filter(c => c.type !== 'Bot' && !c.login.includes('[bot]'));
 
         const cachedDetails: Record<string, ContributorDetail | null> = {};
@@ -41,7 +41,7 @@ export default function Contributors(): React.ReactElement {
           const results = await Promise.allSettled(
             toFetch.map(async (c) => {
               try {
-                const res = await fetch(`https://api.github.com/users/${c.login}`);
+                const res = await fetch(`${GITHUB_API_BASE}/users/${c.login}`);
                 if (!res.ok) {
                   throw new Error(`GitHub API responded with status ${res.status}`);
                 }

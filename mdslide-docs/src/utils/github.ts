@@ -1,4 +1,4 @@
-import type { GHRelease } from '../types/github';
+import type { GHRelease, GHContributor } from '../types/github';
 import { GITHUB_REPO, GITHUB_API_BASE } from '../constants/github';
 
 export function parseNextLink(header: string | null): string | null {
@@ -17,6 +17,23 @@ export async function fetchAllReleases(): Promise<GHRelease[]> {
       throw new Error(`GitHub API responded with status ${res.status}`);
     }
     const page: GHRelease[] = await res.json();
+    all.push(...page);
+    url = parseNextLink(res.headers.get('Link'));
+  }
+
+  return all;
+}
+
+export async function fetchAllContributors(): Promise<GHContributor[]> {
+  let url: string | null = `${GITHUB_API_BASE}/repos/${GITHUB_REPO}/contributors?per_page=100`;
+  const all: GHContributor[] = [];
+
+  while (url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`GitHub API responded with status ${res.status}`);
+    }
+    const page: GHContributor[] = await res.json();
     all.push(...page);
     url = parseNextLink(res.headers.get('Link'));
   }
