@@ -4,8 +4,6 @@ export interface DemoTab {
   id: string;
   label: string;
   filename: string;
-  code: ReactNode | ((activeTheme: string) => ReactNode);
-  preview: (isDark: boolean, activeTheme?: string) => ReactNode;
 }
 
 // A single feature card shown in the features grid section.
