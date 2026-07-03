@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { GHRelease, GHAsset } from '../../types/github';
+import DOMPurify from 'dompurify';
+import type { GHAsset } from '../../types/github';
 import {
   formatBytes,
   formatDate,
@@ -11,7 +12,10 @@ import { ReleaseCardProps } from '@site/src/types/component';
 
 export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): React.ReactElement {
   const [bodyExpanded, setBodyExpanded] = useState(isLatest);
-  const bodyHtml = renderMarkdown(release.body || '');
+  const rawHtml = renderMarkdown(release.body || '');
+  const bodyHtml = typeof window !== 'undefined'
+    ? (DOMPurify.sanitize ? DOMPurify.sanitize(rawHtml) : DOMPurify(window).sanitize(rawHtml))
+    : rawHtml;
 
   const grouped: Record<string, GHAsset[]> = {};
   for (const asset of release.assets) {

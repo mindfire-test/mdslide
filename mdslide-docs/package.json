@@ -20,6 +20,7 @@
     "@docusaurus/preset-classic": "3.10.1",
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
+    "dompurify": "^3.4.11",
     "prism-react-renderer": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -29,6 +30,7 @@
     "@docusaurus/tsconfig": "3.10.1",
     "@docusaurus/types": "3.10.1",
     "@tailwindcss/postcss": "^4.3.2",
+    "@types/dompurify": "^3.2.0",
     "@types/react": "^19.0.0",
     "autoprefixer": "^10.5.2",
     "postcss": "^8.5.16",
