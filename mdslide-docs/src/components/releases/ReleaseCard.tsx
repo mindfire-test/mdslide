@@ -1,21 +1,166 @@
 import React, { useState } from 'react';
-import DOMPurify from 'dompurify';
 import type { GHAsset } from '../../types/github';
 import {
   formatBytes,
   formatDate,
   timeAgo,
-  platformInfo,
-  renderMarkdown
+  platformInfo
 } from '../../utils';
 import { ReleaseCardProps } from '@site/src/types/component';
 
+function parseInline(text: string): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+  let remaining = text;
+  let keyIdx = 0;
+
+  while (remaining) {
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+    const codeMatch = remaining.match(/`([^`]+)`/);
+    const linkMatch = remaining.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/);
+
+    let firstMatch: { index: number; length: number; render: () => React.ReactNode } | null = null;
+
+    if (boldMatch && boldMatch.index !== undefined) {
+      firstMatch = {
+        index: boldMatch.index,
+        length: boldMatch[0].length,
+        render: () => <strong key={`b-${keyIdx++}`}>{boldMatch[1]}</strong>
+      };
+    }
+
+    if (codeMatch && codeMatch.index !== undefined) {
+      if (!firstMatch || codeMatch.index < firstMatch.index) {
+        firstMatch = {
+          index: codeMatch.index,
+          length: codeMatch[0].length,
+          render: () => <code key={`c-${keyIdx++}`}>{codeMatch[1]}</code>
+        };
+      }
+    }
+
+    if (linkMatch && linkMatch.index !== undefined) {
+      if (!firstMatch || linkMatch.index < firstMatch.index) {
+        firstMatch = {
+          index: linkMatch.index,
+          length: linkMatch[0].length,
+          render: () => (
+            <a
+              key={`a-${keyIdx++}`}
+              href={linkMatch[2]}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {linkMatch[1]}
+            </a>
+          )
+        };
+      }
+    }
+
+    if (firstMatch) {
+      if (firstMatch.index > 0) {
+        result.push(remaining.slice(0, firstMatch.index));
+      }
+      result.push(firstMatch.render());
+      remaining = remaining.slice(firstMatch.index + firstMatch.length);
+    } else {
+      result.push(remaining);
+      break;
+    }
+  }
+
+  return result;
+}
+
+function parseBlocks(md: string): React.ReactNode[] {
+  const blocks: React.ReactNode[] = [];
+  const lines = md.split('\n');
+  let i = 0;
+  let keyIdx = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trim().startsWith('```')) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++;
+      blocks.push(
+        <pre key={`pre-${keyIdx++}`}>
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    if (line.startsWith('### ')) {
+      blocks.push(
+        <h3 key={`h3-${keyIdx++}`}>
+          {parseInline(line.slice(4))}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+
+    if (line.startsWith('## ')) {
+      blocks.push(
+        <h2 key={`h2-${keyIdx++}`}>
+          {parseInline(line.slice(3))}
+        </h2>
+      );
+      i++;
+      continue;
+    }
+
+    if (line.startsWith('* ')) {
+      const listItems: React.ReactNode[] = [];
+      while (i < lines.length && lines[i].startsWith('* ')) {
+        listItems.push(
+          <li key={`li-${keyIdx++}`}>
+            {parseInline(lines[i].slice(2))}
+          </li>
+        );
+        i++;
+      }
+      blocks.push(<ul key={`ul-${keyIdx++}`}>{listItems}</ul>);
+      continue;
+    }
+
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    const pLines: string[] = [];
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !lines[i].startsWith('##') &&
+      !lines[i].startsWith('* ') &&
+      !lines[i].trim().startsWith('```')
+    ) {
+      pLines.push(lines[i]);
+      i++;
+    }
+    if (pLines.length > 0) {
+      blocks.push(
+        <p key={`p-${keyIdx++}`}>
+          {parseInline(pLines.join('\n'))}
+        </p>
+      );
+    }
+  }
+
+  return blocks;
+}
+
 export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): React.ReactElement {
   const [bodyExpanded, setBodyExpanded] = useState(isLatest);
-  const rawHtml = renderMarkdown(release.body || '');
-  const bodyHtml = typeof window !== 'undefined'
-    ? (DOMPurify.sanitize ? DOMPurify.sanitize(rawHtml) : DOMPurify(window).sanitize(rawHtml))
-    : rawHtml;
 
   const grouped: Record<string, GHAsset[]> = {};
   for (const asset of release.assets) {
@@ -142,7 +287,7 @@ export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): Re
         </div>
       )}
 
-      {bodyHtml && (
+      {release.body && (
         <div className="p-[0_28px_4px] md:p-[0_20px_4px]">
           <button className="flex items-center gap-2 w-full py-4.5 bg-transparent border-0 border-t border-app-border cursor-pointer font-mono text-[11px] font-medium tracking-wide uppercase text-app-text-secondary transition-colors duration-150 hover:text-app-text-primary" onClick={() => setBodyExpanded(v => !v)}>
             <span>Release Notes</span>
@@ -154,7 +299,9 @@ export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): Re
             </svg>
           </button>
           {bodyExpanded && (
-            <div className="pb-6 font-sans text-sm leading-relaxed text-app-text-primary [&_h2]:font-mono [&_h2]:text-base [&_h2]:font-medium [&_h2]:tracking-tight [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:text-app-text-primary [&_h3]:font-mono [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-app-text-primary [&_p]:text-[13.5px] [&_p]:mb-2 [&_p]:text-app-text-primary [&_ul]:mb-3 [&_ul]:pl-5 [&_li]:text-[13px] [&_li]:mb-1 [&_li]:text-app-text-secondary [&_li_a]:text-app-accent [&_li_a]:no-underline hover:[&_li_a]:underline [&_pre]:bg-app-bg [&_pre]:border [&_pre]:border-app-border [&_pre]:rounded-md [&_pre]:p-3.5 [&_pre]:px-4 [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre_code]:font-mono [&_pre_code]:text-[12.5px] [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0 [&_pre_code]:text-app-text-primary [&_code]:font-mono [&_code]:text-[85%] [&_code]:bg-app-surface [&_code]:border [&_code]:border-app-border [&_code]:rounded [&_code]:px-1.25 [&_code]:py-0.25 [&_code]:text-app-accent" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <div className="pb-6 font-sans text-sm leading-relaxed text-app-text-primary [&_h2]:font-mono [&_h2]:text-base [&_h2]:font-medium [&_h2]:tracking-tight [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:text-app-text-primary [&_h3]:font-mono [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-app-text-primary [&_p]:text-[13.5px] [&_p]:mb-2 [&_p]:text-app-text-primary [&_ul]:mb-3 [&_ul]:pl-5 [&_li]:text-[13px] [&_li]:mb-1 [&_li]:text-app-text-secondary [&_li_a]:text-app-accent [&_li_a]:no-underline hover:[&_li_a]:underline [&_pre]:bg-app-bg [&_pre]:border [&_pre]:border-app-border [&_pre]:rounded-md [&_pre]:p-3.5 [&_pre]:px-4 [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre_code]:font-mono [&_pre_code]:text-[12.5px] [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0 [&_pre_code]:text-app-text-primary [&_code]:font-mono [&_code]:text-[85%] [&_code]:bg-app-surface [&_code]:border [&_code]:border-app-border [&_code]:rounded [&_code]:px-1.25 [&_code]:py-0.25 [&_code]:text-app-accent">
+              {parseBlocks(release.body)}
+            </div>
           )}
         </div>
       )}
