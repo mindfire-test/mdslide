@@ -11,41 +11,62 @@ import CliSection from '../components/landing/CliSection';
 import FooterSection from '../components/landing/FooterSection';
 import { fetchStars, copyToClipboard } from '../utils';
 
-function HomepageContent(): ReactNode {
-  const { colorMode, setColorMode } = useColorMode();
-  const isDark = colorMode === 'dark';
-
+function useScrollThreshold(threshold = 10): boolean {
   const [scrolled, setScrolled] = useState(false);
-  const [starsCount, setStarsCount] = useState<string | null>(null);
-  const [navbarCopied, setNavbarCopied] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 10);
+      setScrolled(window.scrollY > threshold);
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [threshold]);
 
+  return scrolled;
+}
+
+function useHomepageActive(className = 'homepage-active'): void {
   useEffect(() => {
-    document.body.classList.add('homepage-active');
+    document.body.classList.add(className);
     return () => {
-      document.body.classList.remove('homepage-active');
+      document.body.classList.remove(className);
     };
-  }, []);
+  }, [className]);
+}
+
+function useGitHubStarsCount(): string | null {
+  const [starsCount, setStarsCount] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStars()
       .then(setStarsCount)
-      .catch(() => { });
+      .catch((err) => {
+        console.warn('Failed to load GitHub stars:', err);
+      });
   }, []);
 
-  const handleCopy = (text: string, setCopied: (val: boolean) => void) => {
+  return starsCount;
+}
+
+function useClipboardCopyHelper() {
+  return (text: string, setCopied: (val: boolean) => void) => {
     copyToClipboard(text, () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
   };
+}
+
+function HomepageContent(): ReactNode {
+  const { colorMode, setColorMode } = useColorMode();
+  const isDark = colorMode === 'dark';
+
+  const scrolled = useScrollThreshold(10);
+  const starsCount = useGitHubStarsCount();
+  const handleCopy = useClipboardCopyHelper();
+  const [navbarCopied, setNavbarCopied] = useState(false);
+
+  useHomepageActive('homepage-active');
 
   const handleToggleTheme = () => {
     setColorMode(isDark ? 'light' : 'dark');

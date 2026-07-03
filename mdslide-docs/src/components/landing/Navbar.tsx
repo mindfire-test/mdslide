@@ -10,6 +10,23 @@ import {
 } from '../icons';
 import { NavbarProps } from '@site/src/types/index';
 
+const NAV_LINK_CLASSES =
+  "text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full";
+
+function NavLink({
+  to,
+  children,
+}: {
+  to: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <Link to={to} className={NAV_LINK_CLASSES}>
+      {children}
+    </Link>
+  );
+}
+
 export default function Navbar({
   scrolled,
   isDark,
@@ -34,29 +51,14 @@ export default function Navbar({
         </Link>
 
         <div className="flex items-center gap-8">
-          <Link
-            to="/docs/intro"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Docs
-          </Link>
-          <Link
-            to="/contributors"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Contributors
-          </Link>
-          <Link
-            to="/releases"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Releases
-          </Link>
+          <NavLink to="/docs/intro">Docs</NavLink>
+          <NavLink to="/contributors">Contributors</NavLink>
+          <NavLink to="/releases">Releases</NavLink>
           <a
             href="https://github.com/mindfiredigital/mdslide"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full flex items-center gap-1"
+            className={`${NAV_LINK_CLASSES} flex items-center gap-1`}
           >
             GitHub <ExternalLinkIcon />
           </a>
