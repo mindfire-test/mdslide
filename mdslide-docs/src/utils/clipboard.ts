@@ -3,6 +3,8 @@ export function copyToClipboard(text: string, onSuccess: () => void): void {
     navigator.clipboard
       .writeText(text)
       .then(onSuccess)
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('Failed to copy text to clipboard:', err);
+      });
   }
 }

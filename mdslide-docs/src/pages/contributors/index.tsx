@@ -40,10 +40,17 @@ export default function Contributors(): React.ReactElement {
         if (toFetch.length > 0) {
           const results = await Promise.allSettled(
             toFetch.map(async (c) => {
-              const res = await fetch(`https://api.github.com/users/${c.login}`);
-              if (!res.ok) throw new Error();
-              const detailData = await res.json();
-              return { login: c.login, detail: detailData };
+              try {
+                const res = await fetch(`https://api.github.com/users/${c.login}`);
+                if (!res.ok) {
+                  throw new Error(`GitHub API responded with status ${res.status}`);
+                }
+                const detailData = await res.json();
+                return { login: c.login, detail: detailData };
+              } catch (err: any) {
+                console.warn(`Failed to fetch details for ${c.login}:`, err.message);
+                throw err;
+              }
             })
           );
 
