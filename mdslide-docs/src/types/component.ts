@@ -1,4 +1,4 @@
-import { GHContributor, GHRelease } from './github';
+import { GHContributor, GHRelease, ContributorDetail } from './github';
 
 export interface NavbarProps {
   scrolled: boolean;
@@ -26,4 +26,5 @@ export interface ReleaseCardProps {
 
 export interface ContributorCardProps {
   contributor: GHContributor;
+  detail?: ContributorDetail | null;
 }

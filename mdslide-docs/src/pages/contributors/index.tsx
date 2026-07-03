@@ -1,31 +1,74 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '@theme/Layout';
-import type { GHContributor } from '../../types';
-import ContributorCard from '../../components/contributors/ContributorCard';
-import SkeletonCard from '../../components/contributors/SkeletonCard';
+import type { GHContributor, ContributorDetail } from '@site/src/types';
+import ContributorCard from '@site/src/components/contributors/ContributorCard';
+import SkeletonCard from '@site/src/components/contributors/SkeletonCard';
 
 export default function Contributors(): React.ReactElement {
   const [contributors, setContributors] = useState<GHContributor[]>([]);
+  const [details, setDetails] = useState<Record<string, ContributorDetail | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCommits, setTotalCommits] = useState(0);
 
   useEffect(() => {
-    fetch('https://api.github.com/repos/mindfiredigital/mdslide/contributors?per_page=100')
-      .then(r => {
+    async function loadContributors() {
+      try {
+        const r = await fetch('https://api.github.com/repos/mindfiredigital/mdslide/contributors?per_page=100');
         if (!r.ok) throw new Error(`GitHub API responded with ${r.status}`);
-        return r.json();
-      })
-      .then((data: GHContributor[]) => {
+        const data: GHContributor[] = await r.json();
         const humans = data.filter(c => c.type !== 'Bot' && !c.login.includes('[bot]'));
+
+        const cachedDetails: Record<string, ContributorDetail | null> = {};
+        const toFetch: GHContributor[] = [];
+
+        for (const c of humans) {
+          try {
+            const cached = sessionStorage.getItem(`github_contributor_v2_${c.login}`);
+            if (cached) {
+              cachedDetails[c.login] = JSON.parse(cached);
+            } else {
+              toFetch.push(c);
+            }
+          } catch (e) {
+            toFetch.push(c);
+          }
+        }
+
+        const newDetails: Record<string, ContributorDetail | null> = { ...cachedDetails };
+
+        if (toFetch.length > 0) {
+          const results = await Promise.allSettled(
+            toFetch.map(async (c) => {
+              const res = await fetch(`https://api.github.com/users/${c.login}`);
+              if (!res.ok) throw new Error();
+              const detailData = await res.json();
+              return { login: c.login, detail: detailData };
+            })
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              const { login, detail } = result.value;
+              newDetails[login] = detail;
+              try {
+                sessionStorage.setItem(`github_contributor_v2_${login}`, JSON.stringify(detail));
+              } catch (e) {}
+            }
+          }
+        }
+
         setContributors(humans);
+        setDetails(newDetails);
         setTotalCommits(humans.reduce((sum, c) => sum + c.contributions, 0));
         setLoading(false);
-      })
-      .catch(() => {
+      } catch (err) {
         setError('Could not load contributors. GitHub API rate limit may have been reached.');
         setLoading(false);
-      });
+      }
+    }
+
+    loadContributors();
   }, []);
 
   return (
@@ -98,7 +141,7 @@ export default function Contributors(): React.ReactElement {
             {!loading && !error && (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {contributors.map(c => (
-                  <ContributorCard key={c.id} contributor={c} />
+                  <ContributorCard key={c.id} contributor={c} detail={details[c.login]} />
                 ))}
               </div>
             )}
