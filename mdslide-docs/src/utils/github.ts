@@ -1,6 +1,20 @@
 import type { GHRelease, GHContributor } from '../types/github';
 import { GITHUB_REPO, GITHUB_API_BASE } from '../constants/github';
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 10_000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export function parseNextLink(header: string | null): string | null {
   if (!header) return null;
   const match = header.match(/<([^>]+)>;\s*rel="next"/);
@@ -12,7 +26,7 @@ export async function fetchAllReleases(): Promise<GHRelease[]> {
   const all: GHRelease[] = [];
 
   while (url) {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw new Error(`GitHub API responded with status ${res.status}`);
     }
@@ -29,7 +43,7 @@ export async function fetchAllContributors(): Promise<GHContributor[]> {
   const all: GHContributor[] = [];
 
   while (url) {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw new Error(`GitHub API responded with status ${res.status}`);
     }
@@ -55,18 +69,22 @@ export function groupByYear(releases: GHRelease[]): Array<{ year: number; items:
     .map(([year, items]) => ({ year, items }));
 }
 
-export async function fetchStars(): Promise<string> {
-  const res = await fetch(`${GITHUB_API_BASE}/repos/${GITHUB_REPO}`);
-  if (!res.ok) {
-    throw new Error('Failed to fetch repository metadata');
-  }
-  const data = await res.json();
-  if (data && data.stargazers_count !== undefined) {
-    const count = data.stargazers_count;
-    if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'k';
+export async function fetchStars(): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(`${GITHUB_API_BASE}/repos/${GITHUB_REPO}`);
+    if (!res.ok) {
+      return null;
     }
-    return count.toString();
+    const data = await res.json();
+    if (data && data.stargazers_count !== undefined) {
+      const count = data.stargazers_count;
+      if (count >= 1000) {
+        return (count / 1000).toFixed(1) + 'k';
+      }
+      return count.toString();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch stargazers count:', err);
   }
-  return '1';
+  return null;
 }

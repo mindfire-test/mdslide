@@ -16,7 +16,7 @@ function HomepageContent(): ReactNode {
   const isDark = colorMode === 'dark';
 
   const [scrolled, setScrolled] = useState(false);
-  const [starsCount, setStarsCount] = useState('1');
+  const [starsCount, setStarsCount] = useState<string | null>(null);
   const [navbarCopied, setNavbarCopied] = useState(false);
 
   useEffect(() => {
