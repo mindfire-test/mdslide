@@ -109,6 +109,8 @@ export function processOverflow(slides: Slide[]): Slide[] {
         titleAlign: slide.titleAlign,
         titlePosition: slide.titlePosition,
         overflow: slide.overflow,
+        animation: slide.animation,
+        fontSize: slide.fontSize,
       });
 
       continuationCount++;
@@ -217,6 +219,8 @@ export function processOverflow(slides: Slide[]): Slide[] {
         titleAlign: slide.titleAlign,
         titlePosition: slide.titlePosition,
         overflow: slide.overflow,
+        animation: slide.animation,
+        fontSize: slide.fontSize,
       });
     }
   }

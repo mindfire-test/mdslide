@@ -61,6 +61,7 @@ Compiles your slides into a single, dependency-free HTML file containing all sty
 
 - **Presenter View** (`P`)
 - **Fullscreen Mode** (`F`)
+- **Keyboard Shortcuts Help Guide** (`?`)
 - **Animations & reveals**
 
 ### 2. PDF Output (Print-Ready Document)
