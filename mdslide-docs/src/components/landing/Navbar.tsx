@@ -10,6 +10,23 @@ import {
 } from '../icons';
 import { NavbarProps } from '@site/src/types/index';
 
+const NAV_LINK_CLASSES =
+  "text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full";
+
+function NavLink({
+  to,
+  children,
+}: {
+  to: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <Link to={to} className={NAV_LINK_CLASSES}>
+      {children}
+    </Link>
+  );
+}
+
 export default function Navbar({
   scrolled,
   isDark,
@@ -34,29 +51,14 @@ export default function Navbar({
         </Link>
 
         <div className="flex items-center gap-8">
-          <Link
-            to="/docs/intro"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Docs
-          </Link>
-          <Link
-            to="/contributors"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Contributors
-          </Link>
-          <Link
-            to="/releases"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full"
-          >
-            Releases
-          </Link>
+          <NavLink to="/docs/intro">Docs</NavLink>
+          <NavLink to="/contributors">Contributors</NavLink>
+          <NavLink to="/releases">Releases</NavLink>
           <a
             href="https://github.com/mindfiredigital/mdslide"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-app-text-secondary no-underline relative py-1.5 transition-colors duration-200 cursor-pointer hover:text-app-text-primary group after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-app-accent after:transition-all after:duration-250 hover:after:w-full flex items-center gap-1"
+            className={`${NAV_LINK_CLASSES} flex items-center gap-1`}
           >
             GitHub <ExternalLinkIcon />
           </a>
@@ -99,9 +101,11 @@ export default function Navbar({
               <path fillRule="evenodd" d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25zm0 2.445L6.615 5.5a.75.75 0 01-.564.41l-3.097.45 2.24 2.184a.75.75 0 01.216.664l-.528 3.084 2.769-1.456a.75.75 0 01.698 0l2.77 1.456-.53-3.084a.75.75 0 01.216-.664l2.24-2.183-3.096-.45a.75.75 0 01-.564-.41L8 2.694z" />
             </svg>
             <span>Star</span>
-            <span style={{ borderLeft: '1px solid var(--app-border)', paddingLeft: '6px', marginLeft: '2px' }}>
-              {starsCount}
-            </span>
+            {starsCount !== null && (
+              <span style={{ borderLeft: '1px solid var(--app-border)', paddingLeft: '6px', marginLeft: '2px' }}>
+                {starsCount}
+              </span>
+            )}
           </a>
         </div>
       </div>

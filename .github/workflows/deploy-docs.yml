@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'mdslide-docs/**'
+      - '.github/workflows/deploy-docs.yml'
 
   workflow_dispatch:
 

@@ -1,16 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { type ContributorDetail } from '../../types/github';
+import React from 'react';
 import { ContributorCardProps } from '@site/src/types/component';
 
-export default function ContributorCard({ contributor }: ContributorCardProps): React.ReactElement {
-  const [detail, setDetail] = useState<ContributorDetail | null>(null);
-
-  useEffect(() => {
-    fetch(`https://api.github.com/users/${contributor.login}`)
-      .then(r => r.json())
-      .then(d => setDetail(d))
-      .catch(() => { });
-  }, [contributor.login]);
+export default function ContributorCard({ contributor, detail = null }: ContributorCardProps): React.ReactElement {
 
   return (
     <a

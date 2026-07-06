@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import type { GHRelease, GHAsset } from '../../types/github';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
+import type { GHAsset } from '@site/src/types/github';
 import {
   formatBytes,
   formatDate,
   timeAgo,
-  platformInfo,
-  renderMarkdown
-} from '../../utils';
+  platformInfo
+} from '@site/src/utils';
 import { ReleaseCardProps } from '@site/src/types/component';
 
 export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): React.ReactElement {
   const [bodyExpanded, setBodyExpanded] = useState(isLatest);
-  const bodyHtml = renderMarkdown(release.body || '');
 
   const grouped: Record<string, GHAsset[]> = {};
   for (const asset of release.assets) {
@@ -138,7 +138,7 @@ export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): Re
         </div>
       )}
 
-      {bodyHtml && (
+      {release.body && (
         <div className="p-[0_28px_4px] md:p-[0_20px_4px]">
           <button className="flex items-center gap-2 w-full py-4.5 bg-transparent border-0 border-t border-app-border cursor-pointer font-mono text-[11px] font-medium tracking-wide uppercase text-app-text-secondary transition-colors duration-150 hover:text-app-text-primary" onClick={() => setBodyExpanded(v => !v)}>
             <span>Release Notes</span>
@@ -150,7 +150,18 @@ export default function ReleaseCard({ release, isLatest }: ReleaseCardProps): Re
             </svg>
           </button>
           {bodyExpanded && (
-            <div className="pb-6 font-sans text-sm leading-relaxed text-app-text-primary [&_h2]:font-mono [&_h2]:text-base [&_h2]:font-medium [&_h2]:tracking-tight [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:text-app-text-primary [&_h3]:font-mono [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-app-text-primary [&_p]:text-[13.5px] [&_p]:mb-2 [&_p]:text-app-text-primary [&_ul]:mb-3 [&_ul]:pl-5 [&_li]:text-[13px] [&_li]:mb-1 [&_li]:text-app-text-secondary [&_li_a]:text-app-accent [&_li_a]:no-underline hover:[&_li_a]:underline [&_pre]:bg-app-bg [&_pre]:border [&_pre]:border-app-border [&_pre]:rounded-md [&_pre]:p-3.5 [&_pre]:px-4 [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre_code]:font-mono [&_pre_code]:text-[12.5px] [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0 [&_pre_code]:text-app-text-primary [&_code]:font-mono [&_code]:text-[85%] [&_code]:bg-app-surface [&_code]:border [&_code]:border-app-border [&_code]:rounded [&_code]:px-1.25 [&_code]:py-0.25 [&_code]:text-app-accent" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <div className="pb-6 font-sans text-sm leading-relaxed text-app-text-primary [&_h2]:font-mono [&_h2]:text-base [&_h2]:font-medium [&_h2]:tracking-tight [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:text-app-text-primary [&_h3]:font-mono [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-app-text-primary [&_p]:text-[13.5px] [&_p]:mb-2 [&_p]:text-app-text-primary [&_ul]:mb-3 [&_ul]:pl-5 [&_li]:text-[13px] [&_li]:mb-1 [&_li]:text-app-text-secondary [&_li_a]:text-app-accent [&_li_a]:no-underline hover:[&_li_a]:underline [&_pre]:bg-app-bg [&_pre]:border [&_pre]:border-app-border [&_pre]:rounded-md [&_pre]:p-3.5 [&_pre]:px-4 [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre_code]:font-mono [&_pre_code]:text-[12.5px] [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0 [&_pre_code]:text-app-text-primary [&_code]:font-mono [&_code]:text-[85%] [&_code]:bg-app-surface [&_code]:border [&_code]:border-app-border [&_code]:rounded [&_code]:px-1.25 [&_code]:py-0.25 [&_code]:text-app-accent">
+              <ReactMarkdown
+                rehypePlugins={[rehypeSanitize]}
+                components={{
+                  a: ({ node, ...props }) => (
+                    <a target="_blank" rel="noopener noreferrer" {...props} />
+                  )
+                }}
+              >
+                {release.body}
+              </ReactMarkdown>
+            </div>
           )}
         </div>
       )}

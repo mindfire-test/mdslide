@@ -1,9 +1,9 @@
-import { GHContributor, GHRelease } from './github';
+import { GHContributor, GHRelease, ContributorDetail } from './github';
 
 export interface NavbarProps {
   scrolled: boolean;
   isDark: boolean;
-  starsCount: string;
+  starsCount: string | null;
   navbarCopied: boolean;
   onCopy: (text: string, setCopied: (val: boolean) => void) => void;
   setNavbarCopied: (val: boolean) => void;
@@ -26,4 +26,5 @@ export interface ReleaseCardProps {
 
 export interface ContributorCardProps {
   contributor: GHContributor;
+  detail?: ContributorDetail | null;
 }

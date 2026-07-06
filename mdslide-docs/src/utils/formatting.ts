@@ -8,7 +8,11 @@ export function formatBytes(bytes: number): string {
 
 // Formats an ISO date string to a locale specific long format.
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) {
+    return 'Unknown date';
+  }
+  return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -17,7 +21,11 @@ export function formatDate(iso: string): string {
 
 // Computes a human-friendly relative time string (e.g. "3 days ago").
 export function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) {
+    return 'Unknown date';
+  }
+  const diff = Date.now() - date.getTime();
   const days = Math.floor(diff / 86400000);
   if (days === 0) return 'today';
   if (days === 1) return 'yesterday';
@@ -26,24 +34,4 @@ export function timeAgo(iso: string): string {
   if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
   const years = Math.floor(months / 12);
   return `${years} year${years > 1 ? 's' : ''} ago`;
-}
-
-// Converts basic inline Markdown styles into raw HTML strings.
-// Supports headings, bold text, inline code, fenced code, lists, and links.
-
-export function renderMarkdown(md: string): string {
-  return md
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(
-      /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-    )
-    .replace(/^\* (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/gs, (m) => `<ul>${m}</ul>`)
-    .replace(/^(?!<[hupol]|<\/[ul])(.+)$/gm, '<p>$1</p>')
-    .replace(/<p>\s*<\/p>/g, '');
 }

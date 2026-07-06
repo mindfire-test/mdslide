@@ -50,8 +50,8 @@ export default function TypingTerminal(): React.ReactElement {
         </span>
       </div>
       <div className="p-5 font-mono text-xs leading-relaxed text-[#F0EFE9] flex-1 flex flex-col justify-start overflow-y-auto">
-        {history.map((h, i) => (
-          <div key={i}>
+        {history.map((h) => (
+          <div key={h.input}>
             <div>
               <span className="text-[#4F7FD4] mr-2">$</span>
               <span className="text-[#F0EFE9]">{h.input}</span>
@@ -60,13 +60,13 @@ export default function TypingTerminal(): React.ReactElement {
           </div>
         ))}
         {step < COMMAND_SEQUENCE.length && (
-          < div >
+          <div>
             <span className="text-[#4F7FD4] mr-2">$</span>
             <span className="text-[#F0EFE9]">{currentInput}</span>
             <span className="inline-block w-[6px] h-[13px] bg-[#F0EFE9] ml-[2px] align-middle animate-cursor-blink" />
           </div>
         )}
       </div>
-    </div >
+    </div>
   );
 }
