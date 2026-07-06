@@ -196,6 +196,7 @@ When presenting your compiled HTML slides in the browser, you can use the follow
 | `←` (Left Arrow)             | Previous       | Return to the previous slide or sequential item.                                       |
 | `f` / `F`                    | Fullscreen     | Toggle fullscreen mode.                                                                |
 | `p` / `P`                    | Presenter View | Open a synced Presenter View window containing speaker notes and a presentation timer. |
+| `?`                          | Help Guide     | Toggle the keyboard shortcuts overlay cheat sheet.                                     |
 
 ---
 

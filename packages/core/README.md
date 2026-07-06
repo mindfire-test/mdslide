@@ -133,8 +133,8 @@ If a slide contains exactly one image and text block, `mdslide` automatically ge
 
 Override default alignments for any slide's title block:
 
-- `<!-- titleAlign: center -->` — Horizontal alignment: `left` | `center` | `right`
-- `<!-- titlePosition: bottom -->` — Vertical position: `top` | `center` | `bottom`
+- `<!-- titleAlign: center -->` - Horizontal alignment: `left` | `center` | `right`
+- `<!-- titlePosition: bottom -->` - Vertical position: `top` | `center` | `bottom`
 
 ---
 
