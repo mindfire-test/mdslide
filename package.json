@@ -19,6 +19,7 @@
     "version": "changeset version",
     "release": "bun run build && bun run scripts/publishHelper.ts --publish",
     "changeset": "changeset",
+    "auto-changeset": "bun run scripts/autoChangeset.ts",
     "docs:build": "bun run --cwd mdslide-docs build",
     "docs:start": "bun run --cwd mdslide-docs start"
   },
