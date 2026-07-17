@@ -20,6 +20,12 @@ describe('Lexer', () => {
     expect(lexer.isCode({ type: 'code', value: '' })).toBe(true);
     expect(lexer.isTable({ type: 'table', children: [] })).toBe(true);
     expect(lexer.isImage({ type: 'image', url: '' })).toBe(true);
+
+    expect(lexer.isSlideMarker({ type: 'html', value: '<!-- slide -->' })).toBe(true);
+    expect(lexer.isSlideMarker({ type: 'html', value: '<!--slide-->' })).toBe(true);
+    expect(lexer.isSlideMarker({ type: 'html', value: '<!-- SLIDE -->' })).toBe(true);
+    expect(lexer.isSlideMarker({ type: 'html', value: '<!-- notes -->' })).toBe(false);
+    expect(lexer.isSlideMarker({ type: 'text', value: '<!-- slide -->' })).toBe(false);
   });
 });
 
@@ -76,8 +82,76 @@ Description B
     });
   });
 
+  describe('<!-- slide --> explicit marker', () => {
+    test('splits regardless of heading structure, with no headings at all', () => {
+      const md = `
+First slide body.
+
+<!-- slide -->
+
+Second slide body.
+
+<!-- slide -->
+
+Third slide body.
+      `;
+      const result = parseMarkdown(md);
+      expect(result.slides).toHaveLength(3);
+    });
+
+    test('overrides the ## auto-split heuristic instead of stacking with it', () => {
+      const md = `
+## Heading A
+Content A
+
+<!-- slide -->
+
+## Heading B
+Content B
+      `;
+      const result = parseMarkdown(md);
+      // Without the marker this would already be 2 slides via the H2
+      // heuristic; the point is the marker doesn't cause a 3rd, empty split.
+      expect(result.slides).toHaveLength(2);
+    });
+
+    test('mixes with --- dividers in the same file', () => {
+      const md = `
+# Slide 1
+Content 1
+
+---
+
+# Slide 2
+Content 2
+
+<!-- slide -->
+
+# Slide 3
+Content 3
+      `;
+      const result = parseMarkdown(md);
+      expect(result.slides).toHaveLength(3);
+    });
+
+    test('does not leak the marker itself into slide content', () => {
+      const md = `
+First slide.
+
+<!-- slide -->
+
+Second slide.
+      `;
+      const result = parseMarkdown(md);
+      const hasMarkerNode = result.slides.some((s) =>
+        s.nodes.some((n) => n.type === 'html' && (n as any).value.includes('slide'))
+      );
+      expect(hasMarkerNode).toBe(false);
+    });
+  });
+
   describe('Phase 2: Other Structural Headings (# H1 or ### H3)', () => {
-    test('splits slides by H1 or H3 when no H2 or thematic breaks exist', () => {
+    test('splits only on the minimum heading depth present, not every H1/H2/H3', () => {
       const md = `
 # Slide 1
 Content 1
@@ -85,9 +159,43 @@ Content 1
 Content 2
       `;
       const result = parseMarkdown(md);
-      expect(result.slides).toHaveLength(2);
+      // Minimum depth present is 1 (H1), so the H3 subheader stays nested
+      // inside the same slide instead of stranding it as its own slide.
+      expect(result.slides).toHaveLength(1);
       expect((result.slides[0].nodes[0] as any).depth).toBe(1);
+    });
+
+    test('splits by H3 when H3 is the minimum (and only) heading depth present', () => {
+      const md = `
+### Subheader 1
+Content 1
+### Subheader 2
+Content 2
+      `;
+      const result = parseMarkdown(md);
+      expect(result.slides).toHaveLength(2);
+      expect((result.slides[0].nodes[0] as any).depth).toBe(3);
       expect((result.slides[1].nodes[0] as any).depth).toBe(3);
+    });
+
+    test('keeps the documented ::split:: example as a single slide', () => {
+      const md = `
+# Front-end vs Back-end
+
+### Front-end
+
+- React / Next.js
+- Tailwind CSS
+
+::split::
+
+### Back-end
+
+- Node.js / Bun
+- PostgreSQL / Redis
+      `;
+      const result = parseMarkdown(md);
+      expect(result.slides).toHaveLength(1);
     });
   });
 
