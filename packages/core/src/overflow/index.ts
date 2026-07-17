@@ -1,71 +1,18 @@
 import type { Slide, SlideNode } from '@mindfiredigital/mdslide-shared';
-import { extractTextLength } from '../utils/index.js';
-import { MAX_CONTENT_HEIGHT } from '../constants/index.js';
+import { calculateNodeHeight } from '../utils/index.js';
+import { MAX_CONTENT_HEIGHT, FONT_SIZE_SCALE } from '../constants/index.js';
+import { emitWarning } from '../utils/warnings.js';
 
-function calculateNodeHeight(node: SlideNode): number {
-  let baseHeight = 0;
+function fontScaleFor(fontSize?: string): number {
+  if (!fontSize) return 1;
+  return FONT_SIZE_SCALE[fontSize] ?? 1;
+}
 
-  if (node.type === 'code') {
-    const lines = (node.value || '').split('\n').length;
-    baseHeight = 50 + lines * 24;
-  } else if (node.type === 'table') {
-    const rows = node.children ? node.children.length : 0;
-    baseHeight = 35 + rows * 38;
-  } else if (node.type === 'list') {
-    baseHeight = 15;
-  } else if (node.type === 'listItem') {
-    const textLen = extractTextLength(node);
-    const wrapLines = Math.ceil(textLen / 55);
-    baseHeight = Math.max(30, wrapLines * 30) + 10;
-  } else if (node.type === 'image') {
-    baseHeight = 350;
-  } else if (node.type === 'blockquote') {
-    const textLen = extractTextLength(node);
-    const wrapLines = Math.ceil(textLen / 65);
-    baseHeight = 25 + wrapLines * 30 + 15;
-  } else if (node.type === 'heading') {
-    const depth = (node as any).depth || 1;
-    const textLen = extractTextLength(node);
-    if (depth === 1) {
-      const wrapLines = Math.ceil(textLen / 40);
-      baseHeight = wrapLines * 65 + 20;
-    } else {
-      const wrapLines = Math.ceil(textLen / 50);
-      baseHeight = wrapLines * 45 + 15;
-    }
-  } else if (node.type === 'paragraph') {
-    const textLen = extractTextLength(node);
-    const wrapLines = Math.ceil(textLen / 65);
-    baseHeight = wrapLines * 30 + 15;
-  } else {
-    const textLen = extractTextLength(node);
-    const wrapLines = Math.ceil(textLen / 70);
-    baseHeight = wrapLines * 30 + 10;
-  }
+// Calculates a slide's total content height using the auto-split engine's rules. Allows tools like `mdslide validate` to report exact pixel overflows. Accepts optional `fontSize` ('xs' to 'xxl') to scale the height correctly.
 
-  if (node.children && node.type !== 'table') {
-    for (const child of node.children) {
-      if (
-        child.type === 'image' ||
-        child.type === 'list' ||
-        child.type === 'listItem' ||
-        child.type === 'blockquote' ||
-        child.type === 'paragraph' ||
-        child.type === 'code' ||
-        child.type === 'table'
-      ) {
-        if (
-          child.type === 'paragraph' &&
-          (node.type === 'listItem' || node.type === 'blockquote')
-        ) {
-          continue;
-        }
-        baseHeight += calculateNodeHeight(child);
-      }
-    }
-  }
-
-  return baseHeight;
+export function estimateSlideContentHeight(nodes: SlideNode[], fontSize?: string): number {
+  const scale = fontScaleFor(fontSize);
+  return nodes.reduce((total, node) => total + calculateNodeHeight(node, scale), 0);
 }
 
 function generateContinuationId(originalId: string, part: number): string {
@@ -82,10 +29,19 @@ export function processOverflow(slides: Slide[]): Slide[] {
     }
 
     if (slide.overflow !== 'split') {
+      const estimatedHeight = estimateSlideContentHeight(slide.content, slide.fontSize);
+      if (estimatedHeight > MAX_CONTENT_HEIGHT) {
+        emitWarning(
+          `[mdslide compiler] Warning: Slide "${slide.title ?? slide.id}" content may overflow ` +
+            `(~${Math.round(estimatedHeight)}px estimated vs ${MAX_CONTENT_HEIGHT}px budget). ` +
+            `Add "<!-- overflow: split -->" to this slide to auto-split it.`
+        );
+      }
       resultSlides.push(slide);
       continue;
     }
 
+    const scale = fontScaleFor(slide.fontSize);
     let currentSlideContent: SlideNode[] = [];
     let currentHeight = 0;
     let continuationCount = 0;
@@ -111,6 +67,11 @@ export function processOverflow(slides: Slide[]): Slide[] {
         overflow: slide.overflow,
         animation: slide.animation,
         fontSize: slide.fontSize,
+        align: slide.align,
+        columnsConfig: slide.columnsConfig,
+        imageFit: slide.imageFit,
+        imagePosition: slide.imagePosition,
+        accentColor: slide.accentColor,
       });
 
       continuationCount++;
@@ -121,7 +82,7 @@ export function processOverflow(slides: Slide[]): Slide[] {
     const processNodesList = (nodes: SlideNode[]) => {
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        const nodeHeight = calculateNodeHeight(node);
+        const nodeHeight = calculateNodeHeight(node, scale);
         const availableHeight = MAX_CONTENT_HEIGHT - currentHeight;
 
         if (currentHeight + nodeHeight <= MAX_CONTENT_HEIGHT) {
@@ -132,7 +93,7 @@ export function processOverflow(slides: Slide[]): Slide[] {
 
         if (node.type === 'code' && node.lang !== 'mermaid' && availableHeight > 100) {
           const lines = (node.value || '').split('\n');
-          const maxLines = Math.floor((availableHeight - 40) / 16);
+          const maxLines = Math.floor((availableHeight - 40) / (16 * scale));
 
           if (maxLines >= 3 && lines.length - maxLines > 4) {
             const fitCode = lines.slice(0, maxLines).join('\n');
@@ -154,7 +115,7 @@ export function processOverflow(slides: Slide[]): Slide[] {
 
           let splitIndex = -1;
           for (let j = 0; j < children.length; j++) {
-            const childHeight = calculateNodeHeight(children[j]);
+            const childHeight = calculateNodeHeight(children[j], scale);
             if (listHeightAccumulator + childHeight <= availableHeight) {
               fitChildren.push(children[j]);
               listHeightAccumulator += childHeight;
@@ -181,7 +142,7 @@ export function processOverflow(slides: Slide[]): Slide[] {
         if (currentSlideContent.length > 0) {
           let remainingHeight = 0;
           for (let k = i; k < nodes.length; k++) {
-            remainingHeight += calculateNodeHeight(nodes[k]);
+            remainingHeight += calculateNodeHeight(nodes[k], scale);
           }
 
           if (remainingHeight <= 160) {
@@ -221,6 +182,11 @@ export function processOverflow(slides: Slide[]): Slide[] {
         overflow: slide.overflow,
         animation: slide.animation,
         fontSize: slide.fontSize,
+        align: slide.align,
+        columnsConfig: slide.columnsConfig,
+        imageFit: slide.imageFit,
+        imagePosition: slide.imagePosition,
+        accentColor: slide.accentColor,
       });
     }
   }
