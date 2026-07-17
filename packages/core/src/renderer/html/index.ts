@@ -1,34 +1,35 @@
 import type { SlideDeck } from '@mindfiredigital/mdslide-shared';
-import { renderSlide } from './renderSlide.js';
-import { sanitizeHtml } from '../../utils/html.js';
+import { renderSlide, type FragmentCounter } from './renderSlide.js';
+import { sanitizeHtml, sanitizeUrl } from '../../utils/html.js';
 import { script } from './script.js';
 import { RenderDeckOptions } from '../../interfaces/index.js';
-import { DEFAULT_THEME, DEFAULT_TITLE } from '../../constants/index.js';
+import { DEFAULT_THEME, DEFAULT_TITLE, DEFAULT_ASSET_URLS } from '../../constants/index.js';
 import { ThemeEngine } from '../../themes/themeEngine.js';
 export * from './renderSlide.js';
+export * from './renderChart.js';
+export * from './renderStatsGrid.js';
 
 export function renderDeck(deck: SlideDeck, options: RenderDeckOptions = {}): string {
   const themeEngine = new ThemeEngine();
 
   const theme = options.theme ?? String(deck.meta?.theme ?? DEFAULT_THEME);
   const title = String(deck.meta?.title ?? DEFAULT_TITLE);
-  const slidesHtml = deck.slides.map(renderSlide).join('\n');
+  // One counter shared across the deck keeps fragment ids unique within this
+  // document, without leaking state into the next compile (see FragmentCounter).
+  const fragmentCounter: FragmentCounter = { value: 0 };
+  const slidesHtml = deck.slides.map((slide) => renderSlide(slide, fragmentCounter)).join('\n');
 
   const isDarkTheme = ['dark', 'terminal', 'gradient'].includes(theme);
 
+  const assetUrls = { ...DEFAULT_ASSET_URLS, ...options.assetUrls };
   const urls = {
-    prismCss: isDarkTheme
-      ? 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css'
-      : 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css',
-    prismLineNumbersCss:
-      'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css',
-    katexCss: 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css',
-    prismCoreJs: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js',
-    prismAutoloaderJs:
-      'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js',
-    prismLineNumbersJs:
-      'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js',
-    mermaidJs: 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs',
+    prismCss: sanitizeUrl(isDarkTheme ? assetUrls.prismCssDark : assetUrls.prismCssLight),
+    prismLineNumbersCss: sanitizeUrl(assetUrls.prismLineNumbersCss),
+    katexCss: sanitizeUrl(assetUrls.katexCss),
+    prismCoreJs: sanitizeUrl(assetUrls.prismCoreJs),
+    prismAutoloaderJs: sanitizeUrl(assetUrls.prismAutoloaderJs),
+    prismLineNumbersJs: sanitizeUrl(assetUrls.prismLineNumbersJs),
+    mermaidJs: JSON.stringify(assetUrls.mermaidJs).replace(/</g, '\\u003C'),
   };
 
   return `<!DOCTYPE html>
@@ -169,8 +170,18 @@ export function renderDeck(deck: SlideDeck, options: RenderDeckOptions = {}): st
         height: auto !important;
       }
       .deck {
+        width: 1920px !important;
         height: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
         overflow: visible !important;
+        margin: 0 !important;
+        position: relative !important;
+        left: auto !important;
+        top: auto !important;
+        margin-left: 0 !important;
+        margin-top: 0 !important;
       }
       .slide {
         position: relative !important;
@@ -245,13 +256,22 @@ ${slidesHtml}
   <script src="${urls.prismLineNumbersJs}"></script>
   <!-- Mermaid Support -->
   <script type="module">
-    import mermaid from '${urls.mermaidJs}';
+    import mermaid from ${urls.mermaidJs};
     mermaid.initialize({
       startOnLoad: true,
-      theme: document.documentElement.getAttribute('data-theme') === 'dark' || 
+      theme: document.documentElement.getAttribute('data-theme') === 'dark' ||
              document.documentElement.getAttribute('data-theme') === 'terminal' ||
              document.documentElement.getAttribute('data-theme') === 'gradient'
-             ? 'dark' : 'default'
+             ? 'dark' : 'default',
+      // Render labels as native SVG <text> instead of HTML <foreignObject>.
+      // foreignObject content doesn't reliably rescale with the SVG's
+      // viewBox in Chrome's print/headless-screenshot pipeline, which is
+      // how PDF/PPTX export renders slides   with htmlLabels on, the node
+      // boxes scale up correctly but the text inside stays tiny and
+      // appears clipped.
+      flowchart: { htmlLabels: false },
+      class: { htmlLabels: false },
+      state: { htmlLabels: false },
     });
   </script>
   ${script}
