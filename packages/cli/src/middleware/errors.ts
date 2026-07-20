@@ -43,6 +43,17 @@ export class InvalidFormatError extends MdSlideError {
   }
 }
 
+export class InvalidAssetUrlsError extends MdSlideError {
+  constructor(reason: string) {
+    super({
+      code: 'ERR_INVALID_ASSET_URLS',
+      message: `Invalid --asset-urls value: ${reason}`,
+      hint: 'Pass a JSON object mapping asset keys to URLs, e.g. --asset-urls \'{"katexCss":"/vendor/katex.css"}\'',
+    });
+    this.name = 'InvalidAssetUrlsError';
+  }
+}
+
 export class ChromeNotFoundError extends MdSlideError {
   constructor() {
     super({
@@ -77,6 +88,17 @@ export class CompileError extends MdSlideError {
   }
 }
 
+export class StdoutOutputError extends MdSlideError {
+  constructor(message: string) {
+    super({
+      code: 'ERR_STDOUT_OUTPUT',
+      message,
+      hint: 'Piping to stdout (-o -) only supports --format html.',
+    });
+    this.name = 'StdoutOutputError';
+  }
+}
+
 export class ValidationError extends MdSlideError {
   constructor(message = 'Validation failed') {
     super({
@@ -87,3 +109,24 @@ export class ValidationError extends MdSlideError {
     this.name = 'ValidationError';
   }
 }
+
+export class StdinUnsupportedError extends MdSlideError {
+  constructor(message: string, hint: string) {
+    super({ code: 'ERR_STDIN_UNSUPPORTED', message, hint });
+    this.name = 'StdinUnsupportedError';
+  }
+}
+
+export const ERROR_CODES = [
+  'ERR_INPUT_NOT_FOUND',
+  'ERR_INVALID_FORMAT',
+  'ERR_CHROME_NOT_FOUND',
+  'ERR_PORT_IN_USE',
+  'ERR_COMPILE',
+  'ERR_STDOUT_OUTPUT',
+  'ERR_STDIN_UNSUPPORTED',
+  'ERR_VALIDATION_FAILED',
+  'ERR_INVALID_TIMEOUT',
+  'ERR_TIMEOUT',
+  'ERR_INVALID_ASSET_URLS',
+] as const;
