@@ -171,3 +171,12 @@ export interface FlatListLine {
   ordered: boolean;
   numberIndex: number;
 }
+
+export interface GlobalFlags {
+  json: boolean;
+  dryRun: boolean;
+  yes: boolean;
+  noInput: boolean;
+  timeoutMs: number | undefined;
+  logLevel: LogLevel;
+}
