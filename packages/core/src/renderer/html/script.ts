@@ -55,6 +55,76 @@ export const script = `
     };
   });
 
+  // Auto-fit: shrink a slide's font sizes (and its mermaid/media max-height
+  // caps) step by step until content stops exceeding the slide's fixed
+  // 1920x1080 box. Slides have overflow:hidden with no native reflow-to-fit,
+  // so a slide whose actual content (e.g. a diagram plus trailing text) runs
+  // longer than the compile-time estimate would otherwise be silently
+  // clipped at the bottom instead of shrinking to stay visible.
+  const FONT_VARS_BY_SIZE = {
+    xs: { '--title-size': 2.04, '--h2-size': 1.82, '--h3-size': 1.26, '--body-size': 0.95, '--li-size': 0.91, '--code-size': 0.74, '--blockquote-size': 1.09, '--statement-size': 1.40, '--table-size': 0.77, '--th-size': 0.60 },
+    sm: { '--title-size': 2.72, '--h2-size': 2.21, '--h3-size': 1.53, '--body-size': 1.15, '--li-size': 1.11, '--code-size': 0.89, '--blockquote-size': 1.32, '--statement-size': 1.70, '--table-size': 0.94, '--th-size': 0.72 },
+    md: { '--title-size': 3.40, '--h2-size': 2.60, '--h3-size': 1.80, '--body-size': 1.35, '--li-size': 1.30, '--code-size': 1.05, '--blockquote-size': 1.55, '--statement-size': 2.00, '--table-size': 1.10, '--th-size': 0.85 },
+    lg: { '--title-size': 4.25, '--h2-size': 3.00, '--h3-size': 2.10, '--body-size': 1.55, '--li-size': 1.50, '--code-size': 1.20, '--blockquote-size': 1.78, '--statement-size': 2.30, '--table-size': 1.27, '--th-size': 0.98 },
+    xl: { '--title-size': 5.10, '--h2-size': 3.25, '--h3-size': 2.25, '--body-size': 1.69, '--li-size': 1.63, '--code-size': 1.31, '--blockquote-size': 1.94, '--statement-size': 2.50, '--table-size': 1.38, '--th-size': 1.06 },
+    xxl: { '--title-size': 6.12, '--h2-size': 3.51, '--h3-size': 2.43, '--body-size': 1.82, '--li-size': 1.76, '--code-size': 1.42, '--blockquote-size': 2.09, '--statement-size': 2.70, '--table-size': 1.49, '--th-size': 1.15 },
+  };
+  const AUTOFIT_MIN_SCALE = 0.55;
+  const AUTOFIT_STEP = 0.05;
+
+  function autofitSlide(slide) {
+    // .slideContent (not .slide) is the actual clipping boundary: .slide's
+    // own scrollHeight/clientHeight always come out equal because a flex
+    // item with overflow:hidden (.slideContent) gets an automatic minimum
+    // size of 0 (CSS Flexbox 4.5), so .slide's flex layout always "fits" it
+    // exactly   the overflow only shows up one level down, on .slideContent
+    // itself, whose own non-flex children (headings, paragraphs, the
+    // mermaid svg) can't be shrunk by flexbox and so genuinely overflow its
+    // box when they're taller than the space left after the title.
+    const content = slide.querySelector('.slideContent');
+    if (!content) return;
+    const base = FONT_VARS_BY_SIZE[slide.getAttribute('data-font-size')] || FONT_VARS_BY_SIZE.md;
+
+    function applyScale(scale) {
+      Object.keys(base).forEach(function (key) {
+        slide.style.setProperty(key, base[key] * scale + 'rem');
+      });
+      slide.style.setProperty('--mermaid-max-h', 55 * scale + 'vh');
+      slide.style.setProperty('--media-max-h', 55 * scale + 'vh');
+    }
+
+    function overflows() {
+      return content.scrollHeight > content.clientHeight + 1;
+    }
+
+    // Always re-apply from the slide's natural (unscaled) size first, so
+    // repeated calls (mermaid finishing, then images loading later) don't
+    // compound a previous call's shrinkage.
+    applyScale(1);
+    if (!overflows()) return;
+
+    let scale = 1;
+    while (scale > AUTOFIT_MIN_SCALE && overflows()) {
+      scale -= AUTOFIT_STEP;
+      applyScale(scale);
+    }
+
+    if (overflows()) {
+      console.warn(
+        '[mdslide] Slide "' + (slide.getAttribute('data-id') || '') + '" still overflows after ' +
+        'shrinking to ' + Math.round(scale * 100) + '% — shorten its content or add ' +
+        '"<!-- overflow: split -->".'
+      );
+    }
+  }
+
+  function autofitAllSlides() {
+    document.querySelectorAll('.slide').forEach(autofitSlide);
+  }
+
+  window.__mdslideAutofit = autofitAllSlides;
+  window.addEventListener('load', autofitAllSlides);
+
   const deck = document.querySelector('.deck');
 
   function resizeDeck() {

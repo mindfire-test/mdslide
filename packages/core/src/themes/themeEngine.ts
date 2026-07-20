@@ -508,7 +508,7 @@ blockquote.admonition {
 .slideContent img,
 .slideContent video {
   max-width: 100%;
-  max-height: 55vh;
+  max-height: var(--media-max-h, 55vh);
   border-radius: var(--slide-radius);
   object-fit: contain;
   display: block;

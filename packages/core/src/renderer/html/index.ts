@@ -106,7 +106,7 @@ export function renderDeck(deck: SlideDeck, options: RenderDeckOptions = {}): st
 
     .mermaid svg {
       max-width: 100% !important;
-      max-height: 55vh !important;
+      max-height: var(--mermaid-max-h, 55vh) !important;
       height: auto !important;
     }
 
@@ -202,6 +202,12 @@ export function renderDeck(deck: SlideDeck, options: RenderDeckOptions = {}): st
       .progressBarContainer {
         display: none !important;
       }
+      .fragment {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+        animation: none !important;
+      }
     }
   </style>
 </head>
@@ -258,7 +264,7 @@ ${slidesHtml}
   <script type="module">
     import mermaid from ${urls.mermaidJs};
     mermaid.initialize({
-      startOnLoad: true,
+      startOnLoad: false,
       theme: document.documentElement.getAttribute('data-theme') === 'dark' ||
              document.documentElement.getAttribute('data-theme') === 'terminal' ||
              document.documentElement.getAttribute('data-theme') === 'gradient'
@@ -273,6 +279,16 @@ ${slidesHtml}
       class: { htmlLabels: false },
       state: { htmlLabels: false },
     });
+    // startOnLoad is off so we can run diagrams manually and only THEN
+    // measure/autofit slide content   diagram size is otherwise unknown
+    // until mermaid finishes its own layout pass, and running autofit
+    // before that would size text against a not-yet-rendered diagram.
+    try {
+      await mermaid.run();
+    } catch (err) {
+      console.error('[mdslide] mermaid render failed', err);
+    }
+    if (window.__mdslideAutofit) window.__mdslideAutofit();
   </script>
   ${script}
 </body>
