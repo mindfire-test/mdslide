@@ -16,28 +16,40 @@ async function fileExists(p: string): Promise<boolean> {
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
-  const log = new Logger(opts.logLevel ?? 'info');
+  const log = new Logger(opts.json ? 'silent' : (opts.logLevel ?? 'info'));
+  const dryRun = Boolean(opts.dryRun);
   const cwd = process.cwd();
   const slidesPath = path.join(cwd, FILE_NAME.SAMPLE_FILE_NAME);
   const configPath = path.join(cwd, FILE_NAME.SAMPLE_CONFIG_FILE_NAME);
 
-  let created = 0;
+  const created: string[] = [];
+  const skipped: string[] = [];
+  let scriptsAdded = false;
 
-  if (!(await fileExists(slidesPath)) || opts.force) {
-    await fs.promises.writeFile(slidesPath, SAMPLE_SLIDES);
-    log.success(`${INIT_MESSAGES.SLIDES_CREATED}`);
-    created++;
-  } else {
-    log.warn(`${INIT_MESSAGES.SLIDES_EXISTS}`);
-  }
+  const scaffold = async (
+    filePath: string,
+    name: string,
+    content: string,
+    messages: { created: string; exists: string }
+  ): Promise<void> => {
+    if (!(await fileExists(filePath)) || opts.force) {
+      if (!dryRun) await fs.promises.writeFile(filePath, content);
+      created.push(name);
+      log.success(dryRun ? `[dry-run] would create ${name}` : messages.created);
+    } else {
+      skipped.push(name);
+      log.warn(messages.exists);
+    }
+  };
 
-  if (!(await fileExists(configPath)) || opts.force) {
-    await fs.promises.writeFile(configPath, SAMPLE_CONFIG);
-    log.success(`${INIT_MESSAGES.CONFIG_CREATED}`);
-    created++;
-  } else {
-    log.warn(`${INIT_MESSAGES.CONFIG_EXISTS}`);
-  }
+  await scaffold(slidesPath, FILE_NAME.SAMPLE_FILE_NAME, SAMPLE_SLIDES, {
+    created: INIT_MESSAGES.SLIDES_CREATED,
+    exists: INIT_MESSAGES.SLIDES_EXISTS,
+  });
+  await scaffold(configPath, FILE_NAME.SAMPLE_CONFIG_FILE_NAME, SAMPLE_CONFIG, {
+    created: INIT_MESSAGES.CONFIG_CREATED,
+    exists: INIT_MESSAGES.CONFIG_EXISTS,
+  });
 
   const pkgPath = path.join(cwd, FILE_NAME.PACKAGE_NAME);
   if (await fileExists(pkgPath)) {
@@ -49,13 +61,25 @@ export async function initCommand(opts: InitOptions): Promise<void> {
           dev: DEV_COMMANDS.DEV,
           build: DEV_COMMANDS.BUILD,
         };
-        await fs.promises.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-        log.success(`${INIT_MESSAGES.SCRIPTS_ADDED}`);
+        if (!dryRun) await fs.promises.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+        scriptsAdded = true;
+        log.success(
+          dryRun
+            ? `[dry-run] would add "dev" and "build" scripts to package.json`
+            : INIT_MESSAGES.SCRIPTS_ADDED
+        );
       }
     } catch {}
   }
 
-  if (created > 0) {
+  if (opts.json) {
+    process.stdout.write(
+      `${JSON.stringify({ success: true, dryRun, created, skipped, scriptsAdded }, null, 2)}\n`
+    );
+    return;
+  }
+
+  if (created.length > 0) {
     log.raw('');
     log.step(INIT_MESSAGES.NEXT_STEPS);
     log.raw('');
