@@ -29,8 +29,11 @@
     "@mindfiredigital/mdslide-shared": "workspace:*",
     "cac": "^7.0.0",
     "chokidar": "^5.0.0",
+    "katex": "^0.17.0",
     "open": "^10.0.0",
-    "pptxgenjs": "^4.0.1"
+    "pptxgenjs": "^4.0.1",
+    "sharp": "^0.35.3",
+    "shiki": "^4.3.1"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -44,6 +47,8 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@types/katex": "^0.16.8",
+    "jszip": "^3.10.1",
     "tsup": "^8.5.1"
   }
 }
