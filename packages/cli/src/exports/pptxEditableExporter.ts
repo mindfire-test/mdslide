@@ -1,365 +1,375 @@
 import fs from 'fs';
 import path from 'path';
 import pptxgen from 'pptxgenjs';
-import type { SlideDeck } from '@mindfiredigital/mdslide-shared';
+import type { SlideDeck, Slide, SlideNode } from '@mindfiredigital/mdslide-shared';
+import { FONT_SIZE_SCALE } from '@mindfiredigital/mdslide-core';
 import { PPTX_THEMES } from '../constants/exports/pptxConstants.js';
+import type { BlockLayoutOptions, PptxTheme, Rect, TitleContentLayout } from '../types/index.js';
 import {
-  nodeToPlainText,
-  nodeToTextProps,
   findImagesInNodes,
+  addImageOrVideo,
   resolveImagePath,
-  extractFlatListLines,
   pushParagraphNodeToRuns,
-  pushListLinesToRuns,
 } from './helper/pptxEditableSlideHelper.js';
+import { layoutContentBlocks } from './helper/pptxBlockLayout.js';
+import { renderBackgroundToPng, isGradientCss } from './helper/rasterize.js';
+import { DARK_THEMES, slideDetails } from '../constants/pptxBlockLayout.js';
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
+function applyAccentOverride(theme: PptxTheme, accentColor: string): PptxTheme {
+  const hexMatch = accentColor.trim().match(/^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/);
+  if (!hexMatch) return theme;
+  let hex = hexMatch[1]!;
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
+  const upper = hex.toUpperCase();
+  return { ...theme, accent: upper, titleTextColor: upper };
+}
+
+function parseBackgroundImageValue(value: string): { url: string; contrast?: 'dark' | 'light' } {
+  const trimmed = value.trim();
+  const m = trimmed.match(/^(.*)\s+(dark|light)$/i);
+  if (m) return { url: m[1]!.trim(), contrast: m[2]!.toLowerCase() as 'dark' | 'light' };
+  return { url: trimmed };
+}
+
+function computeLayout(slide: Slide, fontScale: number): TitleContentLayout {
+  const fullTop = slideDetails.PAD_TOP;
+  const fullBottom = slideDetails.SLIDE_H - slideDetails.PAD_BOTTOM;
+  const fullH = fullBottom - fullTop;
+
+  if (!slide.title) {
+    return {
+      titleRect: null,
+      contentRect: { x: slideDetails.CONTENT_X, y: fullTop, w: slideDetails.CONTENT_W, h: fullH },
+    };
+  }
+
+  const titleH = clamp(0.72 * fontScale, 0.5, 1.15);
+  const position = slide.titlePosition ?? 'top';
+
+  if (position === 'bottom') {
+    return {
+      titleRect: {
+        x: slideDetails.CONTENT_X,
+        y: fullBottom - titleH,
+        w: slideDetails.CONTENT_W,
+        h: titleH,
+      },
+      contentRect: {
+        x: slideDetails.CONTENT_X,
+        y: fullTop,
+        w: slideDetails.CONTENT_W,
+        h: fullH - titleH - slideDetails.TITLE_GAP,
+      },
+    };
+  }
+  if (position === 'center') {
+    const titleY = fullTop + (fullH - titleH) / 2;
+    const contentY = titleY + titleH + slideDetails.TITLE_GAP;
+    return {
+      titleRect: { x: slideDetails.CONTENT_X, y: titleY, w: slideDetails.CONTENT_W, h: titleH },
+      contentRect: {
+        x: slideDetails.CONTENT_X,
+        y: contentY,
+        w: slideDetails.CONTENT_W,
+        h: Math.max(fullBottom - contentY, 0.3),
+      },
+    };
+  }
+  return {
+    titleRect: { x: slideDetails.CONTENT_X, y: fullTop, w: slideDetails.CONTENT_W, h: titleH },
+    contentRect: {
+      x: slideDetails.CONTENT_X,
+      y: fullTop + titleH + slideDetails.TITLE_GAP,
+      w: slideDetails.CONTENT_W,
+      h: fullH - titleH - slideDetails.TITLE_GAP,
+    },
+  };
+}
+
+function addTitleText(
+  pptxSlide: any,
+  slide: Slide,
+  theme: PptxTheme,
+  rect: Rect,
+  fontScale: number
+): void {
+  const fontSize = Math.max(16, Math.round(26 * fontScale));
+  pptxSlide.addText(slide.title || '', {
+    ...rect,
+    fontSize,
+    bold: true,
+    fontFace: theme.font,
+    color: theme.accent,
+    align: slide.titleAlign ?? 'left',
+    valign: 'middle',
+  });
+}
+
+async function getThemeBackgroundImage(
+  cache: Map<string, string>,
+  cssBackground: string,
+  disableRaster: boolean
+): Promise<string | null> {
+  if (disableRaster) return null;
+  const cached = cache.get(cssBackground);
+  if (cached) return cached;
+  try {
+    const raster = await renderBackgroundToPng(cssBackground, 1280, 720);
+    const dataUri = `image/png;base64,${raster.buffer.toString('base64')}`;
+    cache.set(cssBackground, dataUri);
+    return dataUri;
+  } catch {
+    return null;
+  }
+}
+
+async function applySlideBackground(
+  pptxSlide: any,
+  slide: Slide,
+  theme: PptxTheme,
+  isTitleSlide: boolean,
+  baseDir: string | undefined,
+  bgCache: Map<string, string>,
+  disableRaster: boolean
+): Promise<'dark' | 'light' | undefined> {
+  if (slide.backgroundImage) {
+    const { url, contrast } = parseBackgroundImageValue(slide.backgroundImage);
+    const resolved = resolveImagePath(url, baseDir);
+    if (/^https?:\/\//i.test(resolved)) {
+      try {
+        const res = await fetch(resolved);
+        const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+        const buf = Buffer.from(await res.arrayBuffer());
+        pptxSlide.background = { data: `${contentType};base64,${buf.toString('base64')}` };
+        return contrast;
+      } catch {}
+    } else {
+      pptxSlide.background = { path: resolved };
+      return contrast;
+    }
+  }
+
+  const cssBg = isTitleSlide
+    ? (theme.titleBackgroundCss ?? theme.slideBackgroundCss)
+    : theme.slideBackgroundCss;
+  if (cssBg) {
+    if (isGradientCss(cssBg)) {
+      const dataUri = await getThemeBackgroundImage(bgCache, cssBg, disableRaster);
+      if (dataUri) {
+        pptxSlide.background = { data: dataUri };
+        return undefined;
+      }
+    } else {
+      pptxSlide.background = { fill: cssBg.replace('#', '') };
+      return undefined;
+    }
+  }
+
+  pptxSlide.background = { fill: theme.bg };
+  return undefined;
+}
 
 export async function compileToEditablePptx(
   deck: SlideDeck,
   outputPath: string,
-  options: { theme?: string; baseDir?: string } = {}
+  options: { theme?: string; baseDir?: string; disableRaster?: boolean } = {}
 ): Promise<void> {
   const pptx = new (pptxgen as any)();
   pptx.layout = 'LAYOUT_16x9';
 
   const themeName = options.theme ?? String(deck.meta?.theme ?? 'light');
-  const theme = PPTX_THEMES[themeName] || PPTX_THEMES.light;
+  const baseTheme = PPTX_THEMES[themeName] || PPTX_THEMES.light;
   const baseDir = options.baseDir;
+  const disableRaster = options.disableRaster ?? false;
+  const bgCache = new Map<string, string>();
 
   for (const slide of deck.slides) {
     const pptxSlide = pptx.addSlide();
 
-    // Set background color matching the selected theme
-    pptxSlide.background = { fill: theme.bg };
+    const theme = slide.accentColor ? applyAccentOverride(baseTheme, slide.accentColor) : baseTheme;
+    const fontScale = FONT_SIZE_SCALE[slide.fontSize ?? 'md'] ?? 1;
+    const isTitleSlide = slide.type === 'title';
+    const isDarkTheme = DARK_THEMES.has(themeName);
 
-    // Main Title
-    if (slide.title && slide.type !== 'title' && slide.type !== 'statement') {
-      pptxSlide.addText(slide.title, {
-        x: 0.8,
-        y: 0.4,
-        w: 8.4,
-        h: 0.8,
-        fontSize: 26,
-        bold: true,
-        fontFace: theme.font,
-        color: theme.accent,
-        valign: 'middle',
-      });
+    const contrastOverride = await applySlideBackground(
+      pptxSlide,
+      slide,
+      theme,
+      isTitleSlide,
+      baseDir,
+      bgCache,
+      disableRaster
+    );
+    const effectiveTextColor =
+      contrastOverride === 'dark' ? 'FFFFFF' : contrastOverride === 'light' ? '18181B' : undefined;
+    const renderTheme: PptxTheme = effectiveTextColor
+      ? { ...theme, text: effectiveTextColor }
+      : theme;
+
+    if (slide.notes) {
+      pptxSlide.addNotes(slide.notes);
     }
 
-    // Render slide contents based on layout type
+    const blockOpts: BlockLayoutOptions = {
+      pptx,
+      pptxSlide,
+      theme: renderTheme,
+      baseDir,
+      fontScale,
+      isDarkTheme,
+      imageFit: slide.imageFit,
+      disableRaster,
+    };
+
     if (slide.type === 'title') {
-      // Large centered title layout
       pptxSlide.addText(slide.title || 'Title', {
-        x: 0.8,
-        y: 1.8,
-        w: 8.4,
-        h: 1.2,
-        align: 'center',
-        fontSize: 44,
+        x: slideDetails.CONTENT_X,
+        y: 1.7,
+        w: slideDetails.CONTENT_W,
+        h: Math.max(0.9, 1.15 * fontScale),
+        align: slide.titleAlign ?? 'center',
+        fontSize: Math.max(28, Math.round(44 * fontScale)),
         bold: true,
         fontFace: theme.font,
-        color: theme.accent,
+        color: theme.titleTextColor ?? theme.accent,
       });
 
       if (slide.content && slide.content.length > 0) {
-        const textRuns: any[] = [];
-        slide.content.forEach((node, nodeIdx) => {
-          const isLastNode = nodeIdx === slide.content.length - 1;
-          pushParagraphNodeToRuns(node, textRuns, theme, 20, isLastNode);
-        });
-
-        if (textRuns.length > 0) {
-          pptxSlide.addText(textRuns, {
-            x: 0.8,
-            y: 3.2,
-            w: 8.4,
-            h: 1.5,
-            align: 'center',
-          });
-        }
+        await layoutContentBlocks(
+          slide.content,
+          { x: slideDetails.CONTENT_X, y: 3.1, w: slideDetails.CONTENT_W, h: 1.7 },
+          blockOpts,
+          'top'
+        );
       }
-    } else if (slide.type === 'statement') {
-      // Large statement layout
+      continue;
+    }
+
+    if (slide.type === 'statement') {
       const textRuns: any[] = [];
+      const fontSize = Math.max(18, Math.round(24 * fontScale));
       if (slide.title) {
         textRuns.push({
           text: slide.title + '\n\n',
-          options: { bold: true, fontSize: 32, color: theme.accent, fontFace: theme.font },
+          options: {
+            bold: true,
+            fontSize: Math.max(22, Math.round(32 * fontScale)),
+            color: renderTheme.accent,
+            fontFace: renderTheme.font,
+          },
         });
       }
       slide.content.forEach((node, nodeIdx) => {
         const isLastNode = nodeIdx === slide.content.length - 1;
-        pushParagraphNodeToRuns(node, textRuns, theme, 24, isLastNode);
+        pushParagraphNodeToRuns(node, textRuns, renderTheme, fontSize, isLastNode);
       });
 
       pptxSlide.addText(textRuns, {
-        x: 0.8,
-        y: 1.2,
-        w: 8.4,
-        h: 3.4,
-        align: 'center',
-        valign: 'middle',
+        x: slideDetails.CONTENT_X,
+        y: slideDetails.PAD_TOP,
+        w: slideDetails.CONTENT_W,
+        h: slideDetails.SLIDE_H - slideDetails.PAD_TOP - slideDetails.PAD_BOTTOM,
+        align: slide.align === 'top' || slide.align === 'bottom' ? 'center' : 'center',
+        valign: (slide.align as 'top' | 'middle' | 'bottom') ?? 'middle',
       });
-    } else if (slide.type === 'quote') {
-      // Blockquote card layout
-      const quoteText: any[] = [];
-      const quoteNode = slide.content.find((n) => n.type === 'blockquote');
+      continue;
+    }
 
-      const nodesToRender = quoteNode && quoteNode.children ? quoteNode.children : slide.content;
-      nodesToRender.forEach((node, nodeIdx) => {
-        const isLastNode = nodeIdx === nodesToRender.length - 1;
-        const runs = nodeToTextProps(node, theme);
-        runs.forEach((run, runIdx) => {
-          const isLastRun = runIdx === runs.length - 1;
-          const runOptions: any = {
-            ...run.options,
-            fontSize: 18,
-            italic: true,
-            fontFace: theme.font,
-            color: theme.text,
-          };
-          if (isLastRun && !isLastNode) {
-            runOptions.breakLine = true;
-          }
-          quoteText.push({ text: run.text, options: runOptions });
-        });
-      });
+    // Every remaining slide type shares the same title-band + content-stack
+    // layout; only how `slide.content` maps onto the content rect differs.
+    const { titleRect, contentRect } = computeLayout(slide, fontScale);
+    if (titleRect) {
+      addTitleText(pptxSlide, slide, renderTheme, titleRect, fontScale);
+    }
+    const vAlign = (slide.align as 'top' | 'center' | 'bottom') ?? 'top';
 
-      pptxSlide.addText(quoteText, {
-        x: 1.0,
-        y: 1.4,
-        w: 8.0,
-        h: 3.2,
-        valign: 'middle',
-        fill: { color: theme.cardBg },
-        line: { color: theme.accent, width: 2 },
-        margin: 20,
-      });
-    } else if (slide.type === 'code') {
-      // Code box container layout
-      const codeNode = slide.content.find((n) => n.type === 'code');
-      const codeVal = codeNode?.value || '';
-
-      pptxSlide.addText(codeVal, {
-        x: 0.8,
-        y: 1.3,
-        w: 8.4,
-        h: 3.8,
-        fontSize: 10,
-        fontFace: 'Courier New',
-        color: theme.text,
-        valign: 'top',
-        fill: { color: theme.cardBg },
-        line: { color: theme.accent, width: 1 },
-        margin: 15,
-      });
-    } else if (slide.type === 'visual') {
-      // Large centered image layout
+    if (slide.type === 'visual') {
       let imgUrl = '';
+      const rest: SlideNode[] = [];
       slide.content.forEach((node) => {
-        if (node.type === 'image') {
+        if (node.type === 'image' && !imgUrl) {
           imgUrl = node.url || '';
-        } else if (node.children) {
-          node.children.forEach((c) => {
-            if (c.type === 'image') imgUrl = c.url || '';
-          });
+        } else if (!imgUrl && node.children?.some((c) => c.type === 'image')) {
+          const child = node.children.find((c) => c.type === 'image');
+          imgUrl = child?.url || '';
+        } else {
+          rest.push(node);
         }
       });
 
       if (imgUrl) {
-        const hasTitle = !!slide.title;
-        pptxSlide.addImage({
-          path: resolveImagePath(imgUrl, baseDir),
-          x: 1.0,
-          y: hasTitle ? 1.2 : 0.5,
-          w: 8.0,
-          h: hasTitle ? 4.0 : 4.6,
-        });
+        addImageOrVideo(pptxSlide, imgUrl, baseDir, contentRect, slide.imageFit ?? 'contain');
       } else {
-        const textRuns: any[] = [];
-        slide.content.forEach((node, nodeIdx) => {
-          const isLastNode = nodeIdx === slide.content.length - 1;
-          pushParagraphNodeToRuns(node, textRuns, theme, 16, isLastNode);
-        });
-
-        pptxSlide.addText(textRuns, {
-          x: 0.8,
-          y: 1.4,
-          w: 8.4,
-          h: 3.6,
-          valign: 'top',
-        });
+        await layoutContentBlocks(slide.content, contentRect, blockOpts, vAlign);
       }
-    } else if (slide.type === 'table') {
-      // Tabular comparison grid layout
-      const tableNode = slide.content.find((n) => n.type === 'table');
-      if (tableNode && tableNode.children) {
-        const rows: any[] = [];
-        tableNode.children.forEach((rowNode) => {
-          const cells: any[] = [];
-          if (rowNode.children) {
-            rowNode.children.forEach((cellNode) => {
-              const cellText = cellNode.children
-                ? cellNode.children.map(nodeToPlainText).join('')
-                : cellNode.value || '';
-              cells.push({
-                text: cellText,
-                options: {
-                  fill: cellNode.header ? { color: theme.accent } : { color: theme.cardBg },
-                  color: cellNode.header ? theme.bg : theme.text,
-                  bold: cellNode.header,
-                  fontFace: theme.font,
-                  fontSize: 12,
-                },
-              });
-            });
-          }
-          rows.push(cells);
-        });
-
-        pptxSlide.addTable(rows, {
-          x: 0.8,
-          y: 1.4,
-          w: 8.4,
-          h: 3.6,
-        });
-      }
-    } else if (slide.type === 'split') {
-      // Split layout
-      const leftCol = slide.content[0];
-      const rightCol = slide.content[1];
-
-      // Left column
-      if (leftCol && leftCol.type === 'column' && leftCol.children) {
-        const leftRuns: any[] = [];
-        leftCol.children.forEach((node, nodeIdx) => {
-          const isLastNode = nodeIdx === (leftCol.children?.length ?? 0) - 1;
-          if (node.type === 'list') {
-            const listLines = extractFlatListLines(node, theme);
-            pushListLinesToRuns(listLines, leftRuns, theme, 14, isLastNode);
-          } else {
-            pushParagraphNodeToRuns(node, leftRuns, theme, 14, isLastNode);
-          }
-        });
-
-        if (leftRuns.length > 0) {
-          pptxSlide.addText(leftRuns, {
-            x: 0.8,
-            y: 1.4,
-            w: 3.9,
-            h: 3.6,
-            valign: 'top',
-          });
-        }
-      }
-
-      // Right column
-      if (rightCol && rightCol.type === 'column' && rightCol.children) {
-        const rightChild = rightCol.children[0];
-
-        if (rightChild && rightChild.type === 'image') {
-          pptxSlide.addImage({
-            path: resolveImagePath(rightChild.url || '', baseDir),
-            x: 5.0,
-            y: 1.4,
-            w: 4.2,
-            h: 3.6,
-          });
-        } else if (rightChild && rightChild.type === 'code') {
-          pptxSlide.addText(rightChild.value || '', {
-            x: 5.0,
-            y: 1.4,
-            w: 4.2,
-            h: 3.6,
-            fontSize: 9.5,
-            fontFace: 'Courier New',
-            color: theme.text,
-            valign: 'top',
-            fill: { color: theme.cardBg },
-            line: { color: theme.accent, width: 1 },
-            margin: 12,
-          });
-        } else {
-          const rightRuns: any[] = [];
-          rightCol.children.forEach((node, nodeIdx) => {
-            const isLastNode = nodeIdx === (rightCol.children?.length ?? 0) - 1;
-            pushParagraphNodeToRuns(node, rightRuns, theme, 14, isLastNode);
-          });
-
-          if (rightRuns.length > 0) {
-            pptxSlide.addText(rightRuns, {
-              x: 5.0,
-              y: 1.4,
-              w: 4.2,
-              h: 3.6,
-              valign: 'top',
-            });
-          }
-        }
-      }
-    } else {
-      // Default bullets/content layout
-      const allTextRuns: any[] = [];
-      const imageUrls = findImagesInNodes(slide.content);
-
-      slide.content.forEach((node, nodeIdx) => {
-        const isLastNode = nodeIdx === slide.content.length - 1;
-        if (node.type === 'list') {
-          const listLines = extractFlatListLines(node, theme);
-          pushListLinesToRuns(listLines, allTextRuns, theme, 16, isLastNode);
-        } else {
-          pushParagraphNodeToRuns(node, allTextRuns, theme, 16, isLastNode);
-        }
-      });
-
-      const hasImages = imageUrls.length > 0;
-      const textHeight = hasImages ? 2.0 : 3.8;
-
-      if (allTextRuns.length > 0) {
-        pptxSlide.addText(allTextRuns, {
-          x: 0.8,
-          y: 1.3,
-          w: 8.4,
-          h: textHeight,
-          valign: 'top',
-        });
-      }
-
-      if (hasImages) {
-        const N = imageUrls.length;
-        const gap = 0.3;
-        const totalWidth = 8.4;
-        const imageY = 3.5;
-        const imageHeight = 1.7;
-
-        if (N === 1) {
-          const imgWidth = 4.5;
-          const imgX = 0.8 + (totalWidth - imgWidth) / 2;
-          pptxSlide.addImage({
-            path: resolveImagePath(imageUrls[0]!, baseDir),
-            x: imgX,
-            y: imageY,
-            w: imgWidth,
-            h: imageHeight,
-          });
-        } else {
-          const imgWidth = (totalWidth - gap * (N - 1)) / N;
-          imageUrls.forEach((url, i) => {
-            const imgX = 0.8 + i * (imgWidth + gap);
-            pptxSlide.addImage({
-              path: resolveImagePath(url, baseDir),
-              x: imgX,
-              y: imageY,
-              w: imgWidth,
-              h: imageHeight,
-            });
-          });
-        }
-      }
+      continue;
     }
+
+    if (slide.type === 'split') {
+      const isManualSplit =
+        slide.content.length >= 2 && slide.content.every((n) => n.type === 'column');
+
+      if (!isManualSplit) {
+        // Auto-detected split (core's runTransforms sets type: 'split' without
+        // building column nodes when a slide has exactly one image/video plus
+        // meaningful text - see packages/core/src/transformers/index.ts).
+        const imageUrls = findImagesInNodes(slide.content);
+        const imgUrl = imageUrls[0];
+        const textNodes = slide.content.filter((n) => !(n.type === 'image' && n.url === imgUrl));
+        const imageOnLeft = slide.imagePosition === 'left';
+        const halfW = (contentRect.w - 0.3) / 2;
+        const textBounds: Rect = imageOnLeft
+          ? { x: contentRect.x + halfW + 0.3, y: contentRect.y, w: halfW, h: contentRect.h }
+          : { x: contentRect.x, y: contentRect.y, w: halfW, h: contentRect.h };
+        const imageBounds: Rect = imageOnLeft
+          ? { x: contentRect.x, y: contentRect.y, w: halfW, h: contentRect.h }
+          : { x: contentRect.x + halfW + 0.3, y: contentRect.y, w: halfW, h: contentRect.h };
+
+        await layoutContentBlocks(textNodes, textBounds, blockOpts, vAlign);
+        if (imgUrl) {
+          addImageOrVideo(pptxSlide, imgUrl, baseDir, imageBounds, slide.imageFit);
+        }
+        continue;
+      }
+
+      const gap = 0.25;
+      const columns = slide.content;
+      const totalRatio = columns.reduce(
+        (sum, col) => sum + (col.ratio && col.ratio > 0 ? col.ratio : 1),
+        0
+      );
+      const availableW = contentRect.w - gap * (columns.length - 1);
+
+      let x = contentRect.x;
+      for (const col of columns) {
+        const weight = col.ratio && col.ratio > 0 ? col.ratio : 1;
+        const w = (weight / totalRatio) * availableW;
+        if (col.children && col.children.length > 0) {
+          await layoutContentBlocks(
+            col.children,
+            { x, y: contentRect.y, w, h: contentRect.h },
+            blockOpts,
+            vAlign
+          );
+        }
+        x += w + gap;
+      }
+      continue;
+    }
+
+    // "stack slide.content into the content rect".
+    await layoutContentBlocks(slide.content, contentRect, blockOpts, vAlign);
   }
 
-  // Write output file, creating any missing parent directories first
   await fs.promises.mkdir(path.dirname(path.resolve(outputPath)), { recursive: true });
   await pptx.writeFile({ fileName: path.resolve(outputPath) });
 }

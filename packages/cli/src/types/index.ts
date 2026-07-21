@@ -180,3 +180,26 @@ export interface GlobalFlags {
   timeoutMs: number | undefined;
   logLevel: LogLevel;
 }
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface BlockLayoutOptions {
+  pptx: any;
+  pptxSlide: any;
+  theme: PptxTheme;
+  baseDir?: string;
+  fontScale: number;
+  isDarkTheme: boolean;
+  imageFit?: 'contain' | 'cover';
+  disableRaster?: boolean;
+}
+
+export interface TitleContentLayout {
+  titleRect: Rect | null;
+  contentRect: Rect;
+}
