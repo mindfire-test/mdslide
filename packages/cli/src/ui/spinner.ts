@@ -1,4 +1,5 @@
 import type { Logger } from '../logger/index.js';
+import { COLORS_ENABLED } from '../constants/index.js';
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const CYAN = '\x1b[36m';
@@ -9,7 +10,7 @@ const DIM = '\x1b[2m';
 const GRAY = '\x1b[90m';
 
 function c(color: string, text: string): string {
-  if (!process.stdout.isTTY) return text;
+  if (!COLORS_ENABLED) return text;
   return `${color}${text}${RESET}`;
 }
 
