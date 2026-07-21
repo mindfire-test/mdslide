@@ -1,4 +1,6 @@
-import type { SlideDeck, SlideNode } from '@mindfiredigital/mdslide-shared';
+import type { SlideNode } from '@mindfiredigital/mdslide-shared';
+import { isVideoUrl } from '@mindfiredigital/mdslide-core';
+import { codeToTokensBase } from 'shiki';
 import { FlatListLine, PptxTheme } from '../../types/index.js';
 import { BULLET_CHARS } from '../../constants/exports/pptxConstants.js';
 import path from 'path';
@@ -58,6 +60,16 @@ function nodeToTextProps(node: SlideNode, theme: PptxTheme): any[] {
         hyperlink: { url: node.url || '' },
       },
     });
+  } else if (node.type === 'inlineMath') {
+    // Approximated as italicized source text - pptxgenjs text runs can't
+    // splice in a per-formula image, and rasterizing one image per inline
+    // formula isn't worth the complexity. Block/display math ($$...$$)
+    // gets full KaTeX-rendered image treatment instead - see
+    // pptxBlockLayout.ts's renderMathBlock.
+    props.push({
+      text: node.value || '',
+      options: { ...fontOptions, italic: true, fontFace: 'Courier New' },
+    });
   } else if (node.children) {
     node.children.forEach((c) => {
       props.push(...nodeToTextProps(c, theme));
@@ -106,6 +118,22 @@ function resolveImagePath(imgUrl: string, baseDir?: string): string {
   return path.resolve(imgUrl);
 }
 
+function addImageOrVideo(
+  pptxSlide: any,
+  url: string,
+  baseDir: string | undefined,
+  bounds: { x: number; y: number; w: number; h: number },
+  imageFit?: 'contain' | 'cover'
+): void {
+  const resolvedPath = resolveImagePath(url, baseDir);
+  if (isVideoUrl(url)) {
+    pptxSlide.addMedia({ type: 'video', path: resolvedPath, ...bounds });
+  } else {
+    const sizing = imageFit ? { type: imageFit, w: bounds.w, h: bounds.h } : undefined;
+    pptxSlide.addImage({ path: resolvedPath, ...bounds, ...(sizing ? { sizing } : {}) });
+  }
+}
+
 function getBulletCharCode(indent: number): string {
   return BULLET_CHARS[indent] ?? BULLET_CHARS[2];
 }
@@ -119,6 +147,7 @@ function extractFlatListLines(node: SlideNode, theme: PptxTheme, indent = 0): Fl
   const lines: FlatListLine[] = [];
 
   if (node.type === 'list') {
+    let numberIndex = 0;
     if (node.children) {
       node.children.forEach((item) => {
         if (item.type === 'listItem' && item.children) {
@@ -134,7 +163,14 @@ function extractFlatListLines(node: SlideNode, theme: PptxTheme, indent = 0): Fl
           });
 
           if (itemText.length > 0) {
-            lines.push({ text: itemText, bullet: true, indent });
+            numberIndex += 1;
+            lines.push({
+              text: itemText,
+              bullet: true,
+              indent,
+              ordered: !!node.ordered,
+              numberIndex,
+            });
           }
 
           nestedLists.forEach((l) => {
@@ -158,11 +194,12 @@ function pushParagraphNodeToRuns(
   const runs = nodeToTextProps(node, theme);
   runs.forEach((run, runIdx) => {
     const isLastRun = runIdx === runs.length - 1;
+
     const runOptions: any = {
-      ...run.options,
-      fontSize,
       fontFace: theme.font,
       color: theme.text,
+      ...run.options,
+      fontSize,
     };
     if (isLastRun && !isLastNode) {
       runOptions.breakLine = true;
@@ -187,24 +224,76 @@ function pushListLinesToRuns(
       const isFirstRun = runIdx === 0;
 
       const runOptions: any = {
-        ...run.options,
-        fontSize,
         fontFace: theme.font,
         color: theme.text,
+        ...run.options,
+        fontSize,
       };
 
       if (isFirstRun) {
-        // bullet + indentLevel only on the first run   this triggers a new
-        // paragraph in pptxgenjs and sets the indent for the whole line
-        runOptions.bullet = { characterCode: getBulletCharCode(line.indent) };
+        runOptions.bullet = line.ordered
+          ? { type: 'number', numberType: 'arabicPeriod', numberStartAt: line.numberIndex }
+          : { characterCode: getBulletCharCode(line.indent) };
         runOptions.indentLevel = line.indent;
       }
-      // no breakLine on any bullet run   pptxgenjs handles paragraph breaks
-      // automatically when it sees `bullet` on the next line's first run
 
       runsArray.push({ text: run.text, options: runOptions });
     });
   });
+}
+
+const SHIKI_LIGHT_THEME = 'github-light';
+const SHIKI_DARK_THEME = 'github-dark';
+
+async function highlightCodeToRuns(
+  code: string,
+  lang: string,
+  theme: PptxTheme,
+  fontSize: number,
+  isDarkTheme: boolean
+): Promise<any[]> {
+  if (!code) return [];
+
+  const flat = () => [
+    { text: code, options: { fontFace: 'Courier New', color: theme.text, fontSize } },
+  ];
+  if (!lang) return flat();
+
+  try {
+    const shikiTheme = isDarkTheme ? SHIKI_DARK_THEME : SHIKI_LIGHT_THEME;
+    const lines = await codeToTokensBase(code, { lang: lang as any, theme: shikiTheme });
+    const runs: any[] = [];
+
+    lines.forEach((lineTokens, lineIdx) => {
+      const isLastLine = lineIdx === lines.length - 1;
+      if (lineTokens.length === 0) {
+        runs.push({
+          text: '',
+          options: { fontFace: 'Courier New', fontSize, breakLine: !isLastLine },
+        });
+        return;
+      }
+      lineTokens.forEach((token, tokenIdx) => {
+        const isLastToken = tokenIdx === lineTokens.length - 1;
+        const fontStyle = (token as any).fontStyle ?? 0;
+        runs.push({
+          text: token.content,
+          options: {
+            fontFace: 'Courier New',
+            fontSize,
+            color: (token.color ?? theme.text).replace('#', ''),
+            italic: (fontStyle & 1) !== 0,
+            bold: (fontStyle & 2) !== 0,
+            breakLine: isLastToken && !isLastLine,
+          },
+        });
+      });
+    });
+
+    return runs;
+  } catch {
+    return flat();
+  }
 }
 
 export {
@@ -212,7 +301,9 @@ export {
   nodeToTextProps,
   findImagesInNodes,
   resolveImagePath,
+  addImageOrVideo,
   extractFlatListLines,
   pushParagraphNodeToRuns,
   pushListLinesToRuns,
+  highlightCodeToRuns,
 };
