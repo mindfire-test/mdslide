@@ -1,15 +1,16 @@
 import { icons } from '../assets/index.js';
-import { STYLES, COLORS } from '../constants/index.js';
+import { STYLES, COLORS, COLORS_ENABLED } from '../constants/index.js';
 
 export * from './server.js';
+export * from './stdio.js';
 
 export function c(color: string, text: string): string {
-  if (!process.stdout.isTTY) return text;
+  if (!COLORS_ENABLED) return text;
   return `${color}${text}${STYLES.reset}`;
 }
 
 export function link(url: string): string {
-  if (!process.stdout.isTTY) return url;
+  if (!COLORS_ENABLED) return url;
   return `${COLORS.cyan}${STYLES.bold}${url}${STYLES.reset}`;
 }
 
