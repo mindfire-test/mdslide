@@ -240,6 +240,31 @@ describe('CLI Watch Command', () => {
     expect(resEnd).toHaveBeenCalledWith(expect.stringContaining('Compilation Error'));
   });
 
+  test('--json emits an NDJSON recompile event line for each save', async () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await watchCommand(sampleMd, { logLevel: 'silent', port: 3500, json: true });
+    expect(watcherChangeHandler).not.toBeNull();
+
+    const startupLine = JSON.parse(writeSpy.mock.calls[0][0] as string);
+    expect(startupLine.success).toBe(true);
+
+    watcherChangeHandler();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const recompileLine = JSON.parse(writeSpy.mock.calls.at(-1)![0] as string);
+    expect(recompileLine).toEqual({ event: 'recompile', success: true, slides: 1, warnings: [] });
+
+    mockRunCompileThrow = true;
+    watcherChangeHandler();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const failedLine = JSON.parse(writeSpy.mock.calls.at(-1)![0] as string);
+    expect(failedLine.event).toBe('recompile');
+    expect(failedLine.success).toBe(false);
+    expect(failedLine.error).toContain('mock compilation failure');
+  });
+
   test('watcher handles error events gracefully', async () => {
     await watchCommand(sampleMd, { logLevel: 'silent', port: 3500 });
     expect(watcherErrorHandler).not.toBeNull();
