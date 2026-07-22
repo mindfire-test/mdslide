@@ -36,9 +36,21 @@ Once installed, you can use the `mdslide` command to compile and preview present
   ```bash
   mdslide init
   ```
-- **Validate & Lint Layouts**: Scan your presentation for warnings or slide content overflows.
+- **Validate & Lint Layouts**: Scan your presentation for warnings or slide content overflows (add `--fix` to auto-repair mechanical issues, `--json` for machine-readable output).
   ```bash
   mdslide validate slides.md
+  ```
+- **Inspect Resolved Structure**: Dump each slide's resolved layout, why it was chosen, and its estimated content height, without a full render.
+  ```bash
+  mdslide inspect slides.md --json
+  ```
+- **Screenshot Slides**: Render each slide to a standalone PNG — useful for AI agents (or CI) that can't open a browser to visually confirm a deck.
+  ```bash
+  mdslide screenshot slides.md --json
+  ```
+- **Print the Full Syntax Reference**: Reprint the complete, self-contained syntax/CLI reference (the same one AI agents are pointed at).
+  ```bash
+  mdslide llms
   ```
 
 ---
@@ -80,6 +92,8 @@ mdslide compile slides.md --format pdf
 
 `mdslide` compiles standard Markdown files. You control structure, layout, typography, animations, and overflow behaviors using YAML frontmatter (for global defaults) and HTML comment annotations (for slide-specific overrides).
 
+> This section is a quick overview. Run `mdslide llms` (or read `packages/cli/src/docs/SYNTAX.md`) for the complete, self-contained syntax and CLI reference — the same one AI agents are pointed at.
+
 ### 1. Settings Inheritance & Overrides
 
 Settings can be defined both globally and locally:
@@ -89,13 +103,14 @@ Settings can be defined both globally and locally:
 
 #### **Settings Reference Table**
 
-| Property / Feature     | Frontmatter Key (Global) | Comment Override (Slide-Specific)                     | Allowed Values                                                              | Description                                                    |
-| :--------------------- | :----------------------- | :---------------------------------------------------- | :-------------------------------------------------------------------------- | :------------------------------------------------------------- |
-| **Theme**              | `theme`                  | _N/A (Global only)_                                   | `light`, `dark`, `notion`, `terminal`, `gradient`, `corporate`, `solarized` | Overall aesthetic theme styling and color scheme.              |
-| **Title Alignment**    | `titleAlign`             | `<!-- titleAlign: value -->`                          | `left`, `center`, `right`                                                   | Horizontal alignment for the slide title.                      |
-| **Title Position**     | `titlePosition`          | `<!-- titlePosition: value -->`                       | `top`, `center`, `bottom`                                                   | Vertical positioning for the slide title.                      |
-| **Bullet Animation**   | `animation` / `build`    | `<!-- animation: value -->` / `<!-- build: value -->` | `fade`, `slide-up`, `slide-left`, `slide-right`, `zoom`                     | Step-by-step reveal animation for list items and images.       |
-| **Overflow Splitting** | `overflow`               | `<!-- overflow: value -->`                            | `split`, `none`                                                             | Enables or disables the visual overflow auto-splitting engine. |
+| Property / Feature     | Frontmatter Key (Global) | Comment Override (Slide-Specific)                     | Allowed Values                                                              | Description                                                                       |
+| :--------------------- | :----------------------- | :---------------------------------------------------- | :-------------------------------------------------------------------------- | :-------------------------------------------------------------------------------- |
+| **Theme**              | `theme`                  | _N/A (Global only)_                                   | `light`, `dark`, `notion`, `terminal`, `gradient`, `corporate`, `solarized` | Overall aesthetic theme styling and color scheme.                                 |
+| **Title Alignment**    | `titleAlign`             | `<!-- titleAlign: value -->`                          | `left`, `center`, `right`                                                   | Horizontal alignment for the slide title.                                         |
+| **Title Position**     | `titlePosition`          | `<!-- titlePosition: value -->`                       | `top`, `center`, `bottom`                                                   | Vertical positioning for the slide title.                                         |
+| **Content Alignment**  | `align`                  | `<!-- align: value -->`                               | `top`, `center`, `bottom`                                                   | Vertical packing of the body content itself, independent of where the title sits. |
+| **Bullet Animation**   | `animation` / `build`    | `<!-- animation: value -->` / `<!-- build: value -->` | `fade`, `slide-up`, `slide-left`, `slide-right`, `zoom`                     | Step-by-step reveal animation for list items and images.                          |
+| **Overflow Splitting** | `overflow`               | `<!-- overflow: value -->`                            | `split`, `none`                                                             | Enables or disables the visual overflow auto-splitting engine.                    |
 
 ---
 
@@ -118,8 +133,11 @@ overflow: split
 
 ### 3. Slide Separation
 
+- **`<!-- slide -->` (recommended for AI agents)**: Always starts a new slide, regardless of heading structure elsewhere in the file — the safest marker to emit when generating one slide at a time.
 - **Explicit Dividers**: Slides are separated by three dashes (`---`) on empty lines.
-- **Auto-Separation**: If no dividers are present, the compiler automatically starts a new slide at each Level-2 Heading (`##`).
+- **Auto-Separation**: If neither of the above is present, the compiler automatically starts a new slide at each Level-2 Heading (`##`).
+
+All three can be mixed in one file; either explicit form (`---` or `<!-- slide -->`) always takes precedence over the `##` heuristic.
 
 ---
 
@@ -202,7 +220,7 @@ When presenting your compiled HTML slides in the browser, you can use the follow
 
 ## Advanced Layouts & Styling
 
-### Two-Column Split Layouts (`::split::`)
+### Column Split Layouts (`::split::` / `::col::`)
 
 To split content on a slide into two equal side-by-side columns:
 
@@ -223,6 +241,62 @@ Right Column contents.
 ```
 
 - **Auto-Split Heuristic**: If a slide contains exactly one image alongside text, `mdslide` automatically converts the layout into a split view, placing text on the left and the image on the right.
+
+For more than two columns, use `::col::` (one fewer marker than the number of columns you want) plus an optional `<!-- columns: N ratio:a:b:c -->` annotation for unequal widths:
+
+```markdown
+# Build vs Test vs Deploy
+
+<!-- columns: 3 ratio:2:1:1 -->
+
+Build stuff
+
+::col::
+
+Test stuff
+
+::col::
+
+Deploy stuff
+```
+
+The declared count/ratio are validated against the actual `::col::` markers — `mdslide validate` warns (and falls back to equal-width columns) on a mismatch.
+
+Each column resolves its own layout independently, just like a whole slide would — auto-detected from that column's own content, or forced with a `<!-- layout: xxx -->` comment placed inside that specific column's segment:
+
+```markdown
+# Build vs Test vs Deploy
+
+<!-- columns: 3 ratio:2:1:1 -->
+<!-- layout: code -->
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+::col::
+
+- Smoke tests
+- Integration tests
+
+::col::
+
+Deploy stuff, no special layout here.
+```
+
+Here the Build column is forced to `code` styling while Test auto-detects `bullets` (it has a list) and Deploy auto-detects `content` — each independent of the others. Valid values are the same as the whole-slide `<!-- layout: -->` override, minus `title` and `split`.
+
+### Content Alignment (`align`)
+
+Independent of `titlePosition` (which moves the title + content block together), `<!-- align: top|center|bottom -->` controls how the body content packs within its own space — useful for a short slide that shouldn't glue to the top while the title stays there:
+
+```markdown
+# One Thing to Remember
+
+<!-- align: center -->
+
+Ship small, ship often.
+```
 
 ### Mathematical Equations, GFM & Mermaid Diagrams
 
@@ -257,6 +331,80 @@ Right Column contents.
   - **Tables**: Design aligned comparison and data tables.
   - **Task Lists**: Create checkboxes with `- [ ]` and `- [x]`.
   - **Strikethrough**: Cross out text using `~~strikethrough~~`.
+
+### Content Components (Admonitions, Stats Grid, Charts)
+
+- **Admonitions / callouts**: a blockquote starting with `[!KIND]` (GitHub's
+  own alert syntax — `note`, `tip`, `important`, `warning`, `caution`)
+  renders as an icon + colored callout box:
+
+  ```markdown
+  > [!TIP]
+  > Helpful advice for doing things better or more easily.
+  ```
+
+- **Stats / metric grid**: a fenced code block tagged `stats`, with one
+  `Label: value` pair per line, renders as a row of big-number metric cards:
+
+  ````markdown
+  ```stats
+  Revenue: +34%
+  Deploys/wk: 12
+  NPS: 68
+  ```
+  ````
+
+- **Chart from a table**: `<!-- chart: bar -->` (or `line` / `pie`),
+  placed immediately above a markdown table, renders it as an inline chart
+  instead of a grid — the first column is the category axis, additional
+  columns become chart series:
+
+  ```markdown
+  <!-- chart: bar -->
+
+  | Month | Revenue |
+  | ----- | ------- |
+  | Jan   | 100     |
+  | Feb   | 180     |
+  | Mar   | 260     |
+  ```
+
+### Media Controls (Image Fit/Position, Video, Accent Color)
+
+- **Image fit & position**: `<!-- imageFit: contain|cover -->` overrides how
+  every image/video on a slide is scaled within its box. `<!-- imagePosition:
+left|right -->` controls which side the image sits on in the
+  auto-detected image+text split layout (default `right`):
+
+  ```markdown
+  <!-- imageFit: cover -->
+  <!-- imagePosition: left -->
+
+  The product does X, Y, and Z.
+
+  ![Screenshot](screenshot.png)
+  ```
+
+- **Video / GIF embed**: ordinary image syntax pointing at a `.mp4`/`.webm`
+  file renders as an autoplaying, looping, muted `<video>` instead of a
+  broken `<img>` — great for embedding a short product demo clip:
+
+  ```markdown
+  ![Product demo](demo.mp4)
+  ```
+
+  `.gif` URLs are left untouched — they already autoplay/loop correctly as a
+  plain `<img>`.
+
+- **Per-slide accent color**: `<!-- accentColor: #f43f5e -->` overrides the
+  theme's accent color (list markers, links, borders, chart palette) for
+  just that one slide, without touching the global theme:
+
+  ```markdown
+  <!-- accentColor: #f43f5e -->
+
+  - This slide pops with its own accent color
+  ```
 
 ### Custom Typography, Colors & CSS Overrides
 
