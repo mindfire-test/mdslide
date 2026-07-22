@@ -9,9 +9,10 @@
 - **Auto-live preview / hot-reload server**: Automatically compiles and updates your browser presentation as you edit your markdown.
 - **Gorgeous Built-in Themes**: Clean, modern aesthetics out-of-the-box (`light`, `dark`, `notion`, `terminal`, `gradient`, `corporate`, `solarized`).
 - **Multi-format Exports**: Generate presentation-ready standalone HTML, printable PDF, or PowerPoint (PPTX) files (supports both screenshot and editable text layouts).
-- **Smart Layout Engine**: Detects your content structure to apply the best matching layout (e.g. `bullets`, `code`, `visual`, `table`, `quote`, `statement`).
+- **Smart Layout Engine**: Detects your content structure to apply the best matching layout (e.g. `bullets`, `code`, `visual`, `table`, `quote`, `statement`, N-column `split`).
 - **List & Code Overflow Splitting**: Automatically flows long code blocks and lists across multiple slides to prevent layout overflow.
 - **Speaker Notes Panel**: Native presenter view support for your presentation delivery.
+- **AI-agent friendly**: every command supports `--json`/`--no-input`, plus dedicated `inspect` (structure diagnostics) and `screenshot` (visual confirmation without a browser) commands, and an `llms` command that reprints the full syntax reference.
 
 ---
 
@@ -34,6 +35,8 @@ bun add -g @mindfiredigital/mdslide-cli
 ```bash
 mdslide <command> [input] [options]
 ```
+
+Every command also accepts a set of global flags: `--json` (machine-readable output), `--no-input` (never prompt), `--yes` (auto-accept prompts with defaults), `--dry-run` (validate/compile without writing anything), and `--timeout <ms>` (abort with exit code `124`). Pass `-` as `<input>` to most commands to read Markdown from stdin. See `mdslide llms` for the complete flag and error-code reference.
 
 ### 1. Interactive Mode (Default)
 
@@ -135,17 +138,64 @@ Sanity checks your slide deck for formatting and budget issues.
 mdslide validate <input> [options]
 ```
 
-- **What it does**: Scans your markdown presentation for syntax anomalies, invalid layout overrides, broken local image assets, and checks if slide contents exceed heights/vertical budget constraints (which could cause slide overflow).
-- **Input**: Path to your markdown file (`<input>`).
+- **What it does**: Scans your markdown presentation for syntax anomalies, invalid layout overrides (including per-column `<!-- layout: -->` overrides inside a `::split::`/`::col::` segment), unrecognized `> [!KIND]` admonition markers, invalid or misplaced `<!-- chart: bar|line|pie -->` directives, invalid `<!-- imageFit: -->`/`<!-- imagePosition: -->` values, malformed `<!-- accentColor: -->` values, broken local image assets, N-column split/ratio mismatches, and checks if slide contents exceed heights/vertical budget constraints (which could cause slide overflow).
+- **Input**: Path to your markdown file (`<input>`), or `-` for stdin.
 - **Options**:
+  - `--fix`: Auto-repairs mechanical, unambiguous issues in place (unclosed code fences/notes blocks, stray closing notes tags) before reporting. Not combinable with stdin input.
   - `--strict`: Exits with status code `1` if any warning level messages are found.
+  - `--json`: Prints a single machine-readable JSON report (with per-issue `line`, `hint`, and `fixable`) instead of the human-formatted output.
   - `--verbose`: Outputs verbose warnings and checks.
   - `--silent`: Suppresses all output.
 - **Output**: A structured terminal diagnostic report containing `Errors` (must-fix) and `Warnings` (recommendations).
 
 ---
 
-### 6. Interactive Command (`mdslide interactive`)
+### 6. Inspect Resolved Structure (`mdslide inspect`)
+
+Dumps the parsed slide structure without rendering or opening anything.
+
+```bash
+mdslide inspect <input> [options]
+```
+
+- **What it does**: Compiles the deck and reports, per slide, the resolved layout and _why_ it was chosen (explicit override vs. which auto-detection rule matched, including whether an auto-detected split/visual layout silently superseded an explicit override), element-type counts, and estimated content height against the visible slide budget. For a `split` slide, it also reports each column's own resolved layout (auto-detected or forced via a per-column `<!-- layout: -->` override). A slide with an admonition or a chart table also reports the kinds found (e.g. `admonitions: ["tip"]`, `charts: ["bar"]`), and a slide with an `imageFit`/`imagePosition`/`accentColor` override or a `.mp4`/`.webm` video reports those too (e.g. `accentColor: "#f43f5e"`, `hasVideo: true`). Useful for confirming the compiler did what you intended before spending a full `compile`/render cycle.
+- **Input**: Path to your markdown file (`<input>`), or `-` for stdin.
+- **Options**: `--json`, `--verbose`/`--silent`.
+- **Output**: A per-slide report (or JSON `deck` array) of layout/source/reason/element counts/height/per-column layouts/admonitions/charts.
+
+---
+
+### 7. Screenshot Slides (`mdslide screenshot`)
+
+Renders each slide to a standalone PNG using headless Chrome/Chromium.
+
+```bash
+mdslide screenshot <input> [options]
+```
+
+- **What it does**: The recommended way for an AI agent (which cannot open a browser) to visually confirm layout choices, overflow, image placement, and theme colors. Uses the same capture pipeline as `--pptx-mode screenshot`.
+- **Input**: Path to your markdown file (`<input>`), or `-` for stdin.
+- **Options**:
+  - `-t, --theme <theme>`: Theme choice.
+  - `-o, --output <dir>`: Output directory for the PNG files. Defaults to `./screenshots`.
+  - `--slide <n>`: Capture only slide `<n>` (1-based) instead of the whole deck.
+  - `--width <px>` / `--height <px>`: Viewport size used for the capture. Defaults: `1920`x`1080`.
+  - `--verbose`/`--silent`.
+- **Output**: `slide-<n>.png` files (1-based) in the output directory. Requires a local Chrome/Chromium install.
+
+---
+
+### 8. Print the Syntax Reference (`mdslide llms`)
+
+Reprints the complete, self-contained syntax and CLI reference — the same document an AI agent with no other context is pointed at to author, validate, and export a deck from scratch.
+
+```bash
+mdslide llms
+```
+
+---
+
+### 9. Interactive Command (`mdslide interactive`)
 
 Explicitly runs the interactive wizard.
 
