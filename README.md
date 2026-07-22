@@ -6,7 +6,25 @@
 
 ## Installation
 
-Install the CLI globally using your preferred package manager:
+### Standalone Binary (Recommended)
+
+Install `mdslide` as a standalone binary without needing Node.js or Bun installed:
+
+**macOS & Linux (Shell Script):**
+
+```bash
+curl -fsSL https://mindfiredigital.github.io/mdslide/installer | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://mindfiredigital.github.io/mdslide/installer.ps1 | iex
+```
+
+### Package Managers
+
+Alternatively, install the CLI globally using your preferred package manager:
 
 ```bash
 npm install -g @mindfiredigital/mdslide-cli
