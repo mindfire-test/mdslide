@@ -23,6 +23,9 @@ mdslide init
 
 # Bootstrap and force overwrite existing files
 mdslide init --force
+
+# Preview what would be created, without writing anything
+mdslide init --dry-run --json
 ```
 
 ---
@@ -31,10 +34,27 @@ mdslide init --force
 
 Below are the flags available for the `init` command:
 
-| Flag           | Type      | Default Value | Description                                                                                           |
-| :------------- | :-------- | :------------ | :---------------------------------------------------------------------------------------------------- |
-| **`--force`**  | `boolean` | `false`       | Forcefully overwrites any existing `slides.md` or `mdslide.config.ts` files in the current directory. |
-| **`--silent`** | `boolean` | `false`       | Suppresses all logging output.                                                                        |
+| Flag            | Type      | Default Value | Description                                                                                                                                                                                                                                                              |
+| :-------------- | :-------- | :------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`--force`**   | `boolean` | `false`       | Forcefully overwrites any existing `slides.md` or `mdslide.config.ts` files in the current directory. This behavior is unchanged by `--dry-run`: with both flags set, `init` reports what it _would_ overwrite instead of overwriting it.                                |
+| **`--dry-run`** | `boolean` | `false`       | Reports what would be created or skipped without writing any files (or adding `package.json` scripts). Human-mode output prints lines like `[dry-run] would create slides.md` / `[dry-run] would add "dev" and "build" scripts to package.json` for each pending action. |
+| **`--silent`**  | `boolean` | `false`       | Suppresses all logging output.                                                                                                                                                                                                                                           |
+
+This command also accepts the [global flags](./global-flags.md) (`--json`, `--no-input`, `--yes`, `--dry-run`, `--timeout`); `--dry-run` has init-specific behavior described above, and `--json` has the shape below.
+
+### JSON Output (`--json`)
+
+```json
+{
+  "success": true,
+  "dryRun": false,
+  "created": ["slides.md", "mdslide.config.ts"],
+  "skipped": [],
+  "scriptsAdded": true
+}
+```
+
+`created`/`skipped` list the scaffolded file names (not full paths); `scriptsAdded` is `true` only when a `package.json` in the current directory existed and didn't already define a `dev` script (a `dev`/`build` script pair is then added). All fields reflect what _would_ happen when `dryRun` is `true` — no files are actually written in that case.
 
 ---
 
