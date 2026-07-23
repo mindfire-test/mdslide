@@ -75,7 +75,7 @@ function reportAndExit(err: InvalidAssetUrlsError, jsonMode: boolean): never {
 // exiting with ERR_INVALID_ASSET_URLS on malformed input instead of letting a
 // raw JSON.parse exception crash the process.
 function parseAssetUrlsFlag(raw: unknown, jsonMode: boolean): Record<string, string> | undefined {
-  if (raw === undefined) return undefined;
+  if (raw === undefined || raw === null) return undefined;
 
   let parsed: unknown;
   try {
@@ -88,13 +88,33 @@ function parseAssetUrlsFlag(raw: unknown, jsonMode: boolean): Record<string, str
     reportAndExit(new InvalidAssetUrlsError('expected a JSON object'), jsonMode);
   }
 
+  const safeEntries: [string, string][] = [];
+
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    // Prototype Pollution Defense
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      reportAndExit(new InvalidAssetUrlsError(`restricted property key name: "${key}"`), jsonMode);
+    }
+
+    // Strict String Type Validation
     if (typeof value !== 'string') {
       reportAndExit(new InvalidAssetUrlsError(`value for "${key}" must be a string`), jsonMode);
     }
+
+    // Identical URL and Path Formats Verification
+    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+      safeEntries.push([key, value]);
+    } else {
+      reportAndExit(
+        new InvalidAssetUrlsError(
+          `Value for key "${key}" must look like a valid relative path or absolute URL.`
+        ),
+        jsonMode
+      );
+    }
   }
 
-  return parsed as Record<string, string>;
+  return Object.fromEntries(safeEntries);
 }
 
 cli
