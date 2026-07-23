@@ -6,4 +6,5 @@ export default defineConfig({
   entry: ['src/cli.ts', 'src/index.ts'],
   splitting: true,
   dts: true,
+  loader: { '.md': 'text' },
 });

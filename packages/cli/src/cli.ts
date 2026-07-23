@@ -5,6 +5,7 @@ import { compileCommand } from './commands/compile.js';
 import { watchCommand } from './commands/watch.js';
 import { initCommand } from './commands/init.js';
 import { validateCommand } from './commands/validate.js';
+import { llmsCommand } from './commands/llms.js';
 import { runInteractivePrompt } from './interactiveCommands/index.js';
 import { Logger } from './logger/index.js';
 import { icons } from './assets/index.js';
@@ -137,6 +138,18 @@ cli
       strict: opts.strict ?? false,
       logLevel: opts.verbose ? 'verbose' : opts.silent ? 'silent' : 'info',
     }).catch(() => process.exit(1));
+  });
+
+// llms
+cli
+  .command(
+    'llms',
+    'Print the complete Markdown syntax & CLI reference as plain markdown (for AI agents & LLMs)'
+  )
+  .example('  mdslide llms')
+  .example('  mdslide llms > SYNTAX.md')
+  .action(() => {
+    llmsCommand();
   });
 
 // interactive
