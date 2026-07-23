@@ -203,3 +203,8 @@ export interface TitleContentLayout {
   titleRect: Rect | null;
   contentRect: Rect;
 }
+
+export interface ReportErrorOptions {
+  json?: boolean;
+  isStdoutOutput?: boolean;
+}

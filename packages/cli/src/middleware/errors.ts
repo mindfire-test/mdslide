@@ -1,3 +1,6 @@
+import { Logger } from '../logger/index.js';
+import { ReportErrorOptions } from '../types/index.js';
+
 export class MdSlideError extends Error {
   readonly code: string;
   readonly hint?: string;
@@ -115,6 +118,39 @@ export class StdinUnsupportedError extends MdSlideError {
     super({ code: 'ERR_STDIN_UNSUPPORTED', message, hint });
     this.name = 'StdinUnsupportedError';
   }
+}
+
+export function reportCommandError(
+  err: unknown,
+  opts: ReportErrorOptions,
+  absInput: string,
+  log: Logger
+): void {
+  const e = err instanceof Error ? err : new Error(String(err));
+
+  if (opts.json) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          file: absInput,
+          success: false,
+          error: e.message,
+          code: (e as any).code || undefined,
+          hint: (e as any).hint || undefined,
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  if (opts.isStdoutOutput) {
+    process.stderr.write(`${e.message}\n`);
+    return;
+  }
+
+  log.error(err);
 }
 
 export const ERROR_CODES = [
