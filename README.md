@@ -510,7 +510,7 @@ The configuration object passed to `defineConfig` supports the following propert
 
 ## Contributing
 
-If you are a developer looking to contribute to `mdslide`, please read our [Contributing Guide](CONTRIBUTING.md) to set up your local development environment and start building or test.
+If you are a developer looking to contribute to `mdslide`, please read our [Contributing Guide](CONTRIBUTING.md) to set up your local development environment and start building or testing.
 
 ---
 
