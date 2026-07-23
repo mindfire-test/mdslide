@@ -28,6 +28,8 @@ function getKatexCss(): string {
 export interface RasterOptions {
   chromePath?: string | null;
   timeoutMs?: number;
+  /** FIX: Accept custom user asset mappings to enable offline execution */
+  assetUrls?: Record<string, string>;
 }
 
 export interface RasterResult {
@@ -79,8 +81,13 @@ async function screenshotHtml(
     );
     return await fs.promises.readFile(pngPath);
   } finally {
+    // Gracefully clean up the static asset server binding loop
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+
+    //  Catch errors explicitly and forward them to console or trace instead of swallowing silently
+    await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch((err) => {
+      console.error(`Failed to clean up transient raster directory at "${tmpDir}":`, err.message);
+    });
   }
 }
 
@@ -119,9 +126,13 @@ export async function renderMermaidToPng(
   opts: RasterOptions = {}
 ): Promise<RasterResult> {
   const escaped = source.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Look up mapping context for custom asset configurations dynamically
+  const mermaidAssetUrl = opts.assetUrls?.['mermaidJs'] ?? DEFAULT_ASSET_URLS.mermaidJs;
+
   const body = `<div class="mermaid">${escaped}</div>
 <script type="module">
-  import mermaid from '${DEFAULT_ASSET_URLS.mermaidJs}';
+  import mermaid from '${mermaidAssetUrl}';
   mermaid.initialize({
     startOnLoad: true,
     theme: ${isDarkTheme ? "'dark'" : "'default'"},
