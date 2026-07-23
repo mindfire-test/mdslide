@@ -4,6 +4,8 @@ import { STYLES, COLORS, COLORS_ENABLED } from '../constants/index.js';
 export * from './server.js';
 export * from './stdio.js';
 
+export * from './validatorsUtils.js';
+
 export function c(color: string, text: string): string {
   if (!COLORS_ENABLED) return text;
   return `${color}${text}${STYLES.reset}`;
