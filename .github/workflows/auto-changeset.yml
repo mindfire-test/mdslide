@@ -1,0 +1,39 @@
+name: Auto Changeset Generator
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  auto-changeset:
+    name: Auto Generate Changeset
+    runs-on: ubuntu-latest
+
+    # Skip commits made by github-actions bot to prevent loops
+    if: "!contains(github.event.head_commit.author.name, 'github-actions')"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Auto Changeset Script
+        run: bun run auto-changeset
+
+      - name: Commit and Push Changeset
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(config): automatically generate changeset for conventional commit"
+          file_pattern: ".changeset/*.md"
