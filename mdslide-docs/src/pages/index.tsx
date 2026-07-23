@@ -5,6 +5,7 @@ import Layout from '@theme/Layout';
 import { useColorMode } from '@docusaurus/theme-common';
 import Navbar from '../components/landing/Navbar';
 import HeroSection from '../components/landing/HeroSection';
+import InstallSection from '../components/landing/InstallSection';
 import DemoWidget from '../components/landing/DemoWidget';
 import FeaturesSection from '../components/landing/FeaturesSection';
 import CliSection from '../components/landing/CliSection';
@@ -84,6 +85,7 @@ function HomepageContent(): ReactNode {
         onToggleTheme={handleToggleTheme}
       />
       <HeroSection />
+      <InstallSection />
       <DemoWidget isDark={isDark} />
       <FeaturesSection />
       <CliSection />
