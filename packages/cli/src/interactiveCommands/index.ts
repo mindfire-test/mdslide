@@ -7,9 +7,27 @@ import { c } from './helper/helper.js';
 import { confirm, input, select } from './helper/index.js';
 
 // Interactive Prompt FLow Orchastrator
-export async function runInteractivePrompt(inputFile: string): Promise<InteractiveResult> {
-  const log = new Logger('info');
+export async function runInteractivePrompt(
+  inputFile: string,
+  promptOpts: { auto?: boolean; silent?: boolean } = {}
+): Promise<InteractiveResult> {
+  const log = new Logger(promptOpts.silent ? 'silent' : 'info');
   const name = path.basename(inputFile);
+
+  if (promptOpts.auto) {
+    const format = outputFormat[0]!.value;
+    const theme = themeTypes[0]!.value;
+    const output = `output.${format}`;
+    log.raw('');
+    log.raw(
+      `  ${c(COLORS.magenta + STYLES.bold, '✦ mdslide')}  ${c(COLORS.grey, `→ ${name} (auto-accepted defaults)`)}`
+    );
+    log.raw(`  ${c(COLORS.grey, 'format')}  ${c(COLORS.cyan + STYLES.bold, format.toUpperCase())}`);
+    log.raw(`  ${c(COLORS.grey, 'theme ')}  ${c(COLORS.cyan + STYLES.bold, theme)}`);
+    log.raw(`  ${c(COLORS.grey, 'output')}  ${c(COLORS.cyan + STYLES.bold, output)}`);
+    log.raw('');
+    return { format, theme, output, watch: false, open: false, pptxMode: 'screenshot' };
+  }
 
   log.raw('');
   log.raw(`  ${c(COLORS.magenta + STYLES.bold, '✦ mdslide')}  ${c(COLORS.grey, `→ ${name}`)}`);

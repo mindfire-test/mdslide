@@ -1,4 +1,5 @@
 import { BUILT_IN_THEMES } from './builtInThemes.js';
+import { DEFAULT_THEME } from '../constants/index.js';
 
 export const BUILT_IN_THEME_NAMES = Object.keys(BUILT_IN_THEMES) as Array<
   keyof typeof BUILT_IN_THEMES
@@ -164,6 +165,20 @@ body {
   flex: none;
 }
 
+/* Content-body vertical alignment: how content packs within its own box,
+   independent of where the title+content block sits (titlePosition above). */
+.deck .slide[data-content-align="top"] .slideContent {
+  justify-content: flex-start;
+}
+
+.deck .slide[data-content-align="center"] .slideContent {
+  justify-content: center;
+}
+
+.deck .slide[data-content-align="bottom"] .slideContent {
+  justify-content: flex-end;
+}
+
 /* Content area */
 .slideContent {
   width: 100%;
@@ -216,10 +231,12 @@ body {
   line-height: 1.75;
   margin-bottom: 1rem;
   max-width: 75ch;
+  overflow-wrap: anywhere;
 }
 
-.slide[data-type="statement"] .slideContent p {
-  font-size: 2rem;
+.slide[data-type="statement"] .slideContent p,
+.splitColumn[data-type="statement"] p {
+  font-size: var(--statement-size, 2rem);
   line-height: 1.5;
   font-weight: 500;
   max-width: 65ch;
@@ -237,6 +254,7 @@ body {
   font-size: var(--li-size, 1.3rem);
   line-height: 1.6;
   margin-bottom: 0.8rem;
+  overflow-wrap: anywhere;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease, opacity 0.3s ease;
 }
 
@@ -273,17 +291,90 @@ body {
   border-left: 6px solid var(--slide-accent);
   padding: 1.5rem 2.5rem;
   margin: 1rem 0;
-  background: rgba(128,128,128,0.05);
+  background: var(--slide-surface, rgba(128,128,128,0.05));
   border-radius: 0 var(--slide-radius) var(--slide-radius) 0;
-  font-size: 1.55rem;
+  font-size: var(--blockquote-size, 1.55rem);
   font-style: italic;
   line-height: 1.6;
   color: var(--slide-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Admonitions / callouts (> [!TIP] etc.) - unscoped so the same rule works
+   inside .slideContent and inside a .splitColumn */
+.admonition {
+  border-left: 6px solid var(--admonition-color, var(--slide-accent));
+  background: color-mix(in srgb, var(--admonition-color, var(--slide-accent)) 12%, var(--slide-surface, transparent));
+  padding: 1.1rem 1.5rem;
+  margin: 1rem 0;
+  border-radius: 0 var(--slide-radius) var(--slide-radius) 0;
+}
+
+/* Same specificity as .slideContent blockquote (which sets font-style:
+   italic), placed after it so a callout's body text stays upright - an
+   admonition reads as a note/warning, not a quotation. */
+blockquote.admonition {
+  font-style: normal;
+}
+
+.admonition[data-admonition="note"] { --admonition-color: #4493f8; }
+.admonition[data-admonition="tip"] { --admonition-color: #3fb950; }
+.admonition[data-admonition="important"] { --admonition-color: #a371f7; }
+.admonition[data-admonition="warning"] { --admonition-color: #d29922; }
+.admonition[data-admonition="caution"] { --admonition-color: #f85149; }
+
+.admonitionTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-weight: 700;
+  color: var(--admonition-color, var(--slide-accent));
+  margin-bottom: 0.5em;
+  font-size: 1.05rem;
+}
+
+.admonitionIcon {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+/* Stats / metric grid (fenced code block with a "stats" language tag) */
+.statsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  justify-content: center;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.statCard {
+  flex: 1 1 160px;
+  text-align: center;
+  padding: 1.4rem 1.2rem;
+  border-radius: var(--slide-radius);
+  background: var(--slide-surface, rgba(128,128,128,0.05));
+  border: 1px solid var(--slide-border, rgba(128,128,128,0.15));
+}
+
+.statValue {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: var(--slide-accent);
+  line-height: 1.15;
+}
+
+.statLabel {
+  margin-top: 0.4rem;
+  color: var(--slide-muted);
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* Code blocks */
 .slideContent pre {
-  background: rgba(0,0,0,0.05);
+  background: var(--slide-surface, rgba(0,0,0,0.05));
   border-radius: var(--slide-radius);
   padding: 1.5rem 2rem;
   overflow-x: auto;
@@ -331,36 +422,93 @@ body {
 .slideContent table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 1.1rem;
+  font-size: var(--table-size, 1.1rem);
   margin-top: 0.5rem;
 }
 
 .slideContent th {
   font-weight: 600;
-  font-size: 1rem;
   text-align: left;
   padding: 0.75rem 1rem;
   border-bottom: 2px solid var(--slide-accent);
   color: var(--slide-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.85rem;
+  font-size: var(--th-size, 0.85rem);
+  overflow-wrap: anywhere;
 }
 
 .slideContent td {
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--slide-border, rgba(128,128,128,0.15));
-  font-size: 1.1rem;
+  font-size: var(--table-size, 1.1rem);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .slideContent tr:last-child td { border-bottom: none; }
 .slideContent tr:hover td { background: rgba(128,128,128,0.04); }
 
-/* Images */
-.slideContent img {
+/* Chart-from-table (<!-- chart: bar|line|pie --> above a table) */
+.chartContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.chartSvg {
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+}
+
+.chartAxisLine,
+.chartGridLine {
+  stroke: var(--slide-border, rgba(128,128,128,0.25));
+  stroke-width: 1;
+}
+
+.chartValueLabel,
+.chartAxisLabel {
+  fill: var(--slide-muted);
+  font-size: 13px;
+  font-family: var(--slide-font);
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--slide-muted);
+}
+
+.chartLegendVertical {
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.chartLegendItem {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chartLegendSwatch {
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 0.4em;
+}
+
+/* Images (and .mp4/.webm videos embedded via the same image syntax) */
+.slideContent img,
+.slideContent video {
   max-width: 100%;
-  max-height: 55vh;
+  max-height: var(--media-max-h, 55vh);
   border-radius: var(--slide-radius);
   object-fit: contain;
   display: block;
@@ -376,7 +524,8 @@ body {
   width: 100%;
 }
 
-.inlineImageGrid img {
+.inlineImageGrid img,
+.inlineImageGrid video {
   flex: 1 1 0;
   min-width: 0;
   max-height: 34vh;
@@ -384,6 +533,18 @@ body {
   object-fit: cover;
   border-radius: var(--slide-radius);
   border: 1px solid var(--slide-border, rgba(128,128,128,0.12));
+}
+
+/* Per-slide <!-- imageFit: contain|cover --> override, applies to every
+   image/video context above regardless of its own default. */
+.slide[data-image-fit="contain"] img,
+.slide[data-image-fit="contain"] video {
+  object-fit: contain !important;
+}
+
+.slide[data-image-fit="cover"] img,
+.slide[data-image-fit="cover"] video {
+  object-fit: cover !important;
 }
 
 .slide[data-type="visual"] {
@@ -399,36 +560,42 @@ body {
   align-items: center;
 }
 
-.slide[data-type="visual"] img {
+.slide[data-type="visual"] img,
+.slide[data-type="visual"] video {
   max-width: 100%;
   max-height: 72vh;
   object-fit: contain;
   border-radius: var(--slide-radius);
 }
 
-/* Refined Bullets Layout */
-.slide[data-type="bullets"] .slideContent li {
+/* Refined Bullets Layout - also applies to a single column carrying its own
+   <!-- layout: bullets --> override inside a ::split::/::col:: */
+.slide[data-type="bullets"] .slideContent li,
+.splitColumn[data-type="bullets"] li {
   font-size: calc(var(--li-size, 1.3rem) * 1.05);
   margin-bottom: 1.1rem;
 }
 
-/* Refined Code Layout */
-.slide[data-type="code"] .slideContent pre {
+/* Refined Code Layout - also applies per-column, see above */
+.slide[data-type="code"] .slideContent pre,
+.splitColumn[data-type="code"] pre {
   border: 1px solid var(--slide-accent, rgba(128,128,128,0.2));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-/* Refined Quote Layout */
-.slide[data-type="quote"] .slideContent blockquote {
+/* Refined Quote Layout - also applies per-column, see above */
+.slide[data-type="quote"] .slideContent blockquote,
+.splitColumn[data-type="quote"] blockquote {
   border-left: 5px solid var(--slide-accent);
   background: var(--slide-surface, rgba(128, 128, 128, 0.04));
   padding: 1.75rem 2.5rem;
-  font-size: 1.5rem;
+  font-size: var(--blockquote-size, 1.55rem);
   border-radius: var(--slide-radius);
 }
 
-/* Refined Table Layout */
-.slide[data-type="table"] .slideContent table {
+/* Refined Table Layout - also applies per-column, see above */
+.slide[data-type="table"] .slideContent table,
+.splitColumn[data-type="table"] table {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--slide-border, rgba(128, 128, 128, 0.15));
 }
@@ -447,27 +614,23 @@ body {
   flex: 1;
   min-width: 0;
   text-align: left;
-}
-
-.splitColumn.textColumn {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  align-items: flex-start;
   gap: 1rem;
 }
 
-.splitColumn.imageColumn,
-.splitColumn.rightColumn {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+.splitColumn.imageColumn {
+  align-items: center;
 }
 
-.splitColumn.imageColumn img {
+.splitColumn img,
+.splitColumn video {
   width: 100%;
   height: auto;
   max-height: 62vh;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--slide-radius);
 }
 
@@ -524,6 +687,10 @@ body {
   --body-size: 0.95rem;
   --li-size: 0.91rem;
   --code-size: 0.74rem;
+  --blockquote-size: 1.09rem;
+  --statement-size: 1.40rem;
+  --table-size: 0.77rem;
+  --th-size: 0.60rem;
 }
 
 .slide[data-font-size="sm"] {
@@ -533,6 +700,10 @@ body {
   --body-size: 1.15rem;
   --li-size: 1.11rem;
   --code-size: 0.89rem;
+  --blockquote-size: 1.32rem;
+  --statement-size: 1.70rem;
+  --table-size: 0.94rem;
+  --th-size: 0.72rem;
 }
 
 .slide[data-font-size="lg"] {
@@ -542,6 +713,10 @@ body {
   --body-size: 1.55rem;
   --li-size: 1.50rem;
   --code-size: 1.20rem;
+  --blockquote-size: 1.78rem;
+  --statement-size: 2.30rem;
+  --table-size: 1.27rem;
+  --th-size: 0.98rem;
 }
 
 .slide[data-font-size="xl"] {
@@ -551,6 +726,10 @@ body {
   --body-size: 1.69rem;
   --li-size: 1.63rem;
   --code-size: 1.31rem;
+  --blockquote-size: 1.94rem;
+  --statement-size: 2.50rem;
+  --table-size: 1.38rem;
+  --th-size: 1.06rem;
 }
 
 .slide[data-font-size="xxl"] {
@@ -560,6 +739,10 @@ body {
   --body-size: 1.82rem;
   --li-size: 1.76rem;
   --code-size: 1.42rem;
+  --blockquote-size: 2.09rem;
+  --statement-size: 2.70rem;
+  --table-size: 1.49rem;
+  --th-size: 1.15rem;
 }
 
 /* Progress bar */
@@ -766,55 +949,9 @@ body.showDok .dokContainer,
   color: var(--slide-text);
 }
 
-/* Print PDF */
-@media print {
-  @page { size: 1920px 1080px; margin: 0; }
-
-  body {
-    background: var(--slide-bg) !important;
-    color: var(--slide-text) !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    overflow: visible !important;
-    height: auto !important;
-    display: block !important;
-  }
-
-  .deck {
-    width: 1920px !important;
-    height: 1080px !important;
-    transform: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    overflow: visible !important;
-    margin: 0 !important;
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
-    margin-left: 0 !important;
-    margin-top: 0 !important;
-  }
-
-  .slide {
-    position: relative !important;
-    display: flex !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transform: none !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    height: 1080px !important;
-    width: 1920px !important;
-    margin: 0 !important;
-    border: none !important;
-  }
-
-  body .dokContainer, body .progressBarContainer { display: none; }
-
-  .fragment {
-    opacity: 1 !important;
-  }
-}
+/* Print CSS lives in renderer/html/index.ts's renderDeck output, which is
+   the only consumer of this base stylesheet   keeping one source of truth
+   instead of two independent @media print blocks that raced on DOM order. */
 
 /* Fullscreen mode styling */
 body.mdslide-fullscreen {
@@ -835,6 +972,11 @@ body.mdslide-fullscreen * {
   }
 
   resolveTheme(themeName: string): string {
-    return BUILT_IN_THEMES[themeName] ?? themeName;
+    const resolvedName = BUILT_IN_THEME_NAMES.includes(
+      themeName as (typeof BUILT_IN_THEME_NAMES)[number]
+    )
+      ? themeName
+      : DEFAULT_THEME;
+    return BUILT_IN_THEMES[resolvedName]!;
   }
 }

@@ -10,8 +10,16 @@ import {
   normalizeAnimation,
   parseFontSizeConfig,
   normalizeFontSize,
+  parseContentAlign,
+  normalizeVerticalPosition,
+  parseColumnsConfig,
+  parseChartAnnotations,
+  parseImageConfig,
+  parseAccentColor,
 } from '../src/normalizer/normalizeLayout.ts';
 import { extractSlideNotes } from '../src/normalizer/normalizeNote.ts';
+import { detectAdmonition } from '../src/normalizer/normalizeAdmonition.ts';
+import { setWarningHandler } from '../src/utils/warnings.ts';
 import {
   toSlideAstNode,
   normalizeSlide,
@@ -53,6 +61,42 @@ describe('Normalize Layout', () => {
     const { layoutOverride, filteredNodes } = parseLayoutOveride(nodes);
     expect(layoutOverride).toBeUndefined();
     expect(filteredNodes).toHaveLength(2);
+  });
+
+  test('parseLayoutOveride is a no-op (leaves comments untouched) when a ::col:: boundary is present', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- layout: bullets -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: '::col::' }] },
+      { type: 'html', value: '<!-- layout: code -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Column content' }] },
+    ];
+    const { layoutOverride, filteredNodes } = parseLayoutOveride(nodes);
+    // No whole-slide override is captured: with a column boundary present,
+    // layout resolution happens per-column later (resolveColumnLayout), so
+    // every comment - including one physically before the first boundary,
+    // which is column 1's own content, not slide-wide - is left untouched.
+    expect(layoutOverride).toBeUndefined();
+    expect(filteredNodes).toEqual(nodes);
+  });
+
+  test('parseLayoutOveride is a no-op when a ::split:: boundary is present too', () => {
+    const nodes: RootContent[] = [
+      { type: 'paragraph', children: [{ type: 'text', value: '::split::' }] },
+      { type: 'html', value: '<!-- layout: quote -->' },
+    ];
+    const { layoutOverride, filteredNodes } = parseLayoutOveride(nodes);
+    expect(layoutOverride).toBeUndefined();
+    expect(filteredNodes).toEqual(nodes);
+  });
+
+  test('parseLayoutOveride is generic over SlideNode[] for per-column reuse', () => {
+    const nodes = [
+      { type: 'html', value: '<!-- layout: code -->' },
+      { type: 'text', value: 'hi' },
+    ];
+    const { layoutOverride, filteredNodes } = parseLayoutOveride(nodes);
+    expect(layoutOverride).toBe('code');
+    expect(filteredNodes).toHaveLength(1);
   });
 
   test('parseBackgroundImage extracts background image comments and cleans wrapper', () => {
@@ -162,6 +206,57 @@ describe('Normalize Layout', () => {
     expect(normalizeFontSize('invalid')).toBeUndefined();
   });
 
+  test('normalizeVerticalPosition normalizes typos/aliases shared by titlePosition and align', () => {
+    expect(normalizeVerticalPosition('top')).toBe('top');
+    expect(normalizeVerticalPosition('BOTTOM')).toBe('bottom');
+    expect(normalizeVerticalPosition('buttom')).toBe('bottom');
+    expect(normalizeVerticalPosition('middle')).toBe('center');
+    expect(normalizeVerticalPosition('center')).toBe('center');
+  });
+
+  test('parseContentAlign extracts the align comment and filters nodes', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- align: middle -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] },
+    ];
+    const { align, filteredNodes } = parseContentAlign(nodes);
+    expect(align).toBe('center');
+    expect(filteredNodes).toHaveLength(1);
+    expect(filteredNodes[0].type).toBe('paragraph');
+  });
+
+  test('parseContentAlign leaves nodes untouched when no align comment is present', () => {
+    const nodes: RootContent[] = [
+      { type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] },
+    ];
+    const { align, filteredNodes } = parseContentAlign(nodes);
+    expect(align).toBeUndefined();
+    expect(filteredNodes).toHaveLength(1);
+  });
+
+  test('parseColumnsConfig extracts count and ratio', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- columns: 3 ratio:2:1:1 -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] },
+    ];
+    const { columnsConfig, filteredNodes } = parseColumnsConfig(nodes);
+    expect(columnsConfig).toEqual({ count: 3, ratio: [2, 1, 1] });
+    expect(filteredNodes).toHaveLength(1);
+  });
+
+  test('parseColumnsConfig works without a ratio', () => {
+    const nodes: RootContent[] = [{ type: 'html', value: '<!-- columns: 3 -->' }];
+    const { columnsConfig } = parseColumnsConfig(nodes);
+    expect(columnsConfig).toEqual({ count: 3, ratio: undefined });
+  });
+
+  test('parseColumnsConfig ignores unrelated comments', () => {
+    const nodes: RootContent[] = [{ type: 'html', value: '<!-- layout: split -->' }];
+    const { columnsConfig, filteredNodes } = parseColumnsConfig(nodes);
+    expect(columnsConfig).toBeUndefined();
+    expect(filteredNodes).toHaveLength(1);
+  });
+
   test('resolveSlideLayout returns custom layout if layoutOverride is valid', () => {
     const layout = resolveSlideLayout([], false, 'bullets');
     expect(layout).toBe('bullets');
@@ -196,6 +291,156 @@ describe('Normalize Layout', () => {
   });
 });
 
+describe('parseChartAnnotations', () => {
+  test('attaches a valid chart hint to the immediately following table and strips the comment', () => {
+    const tableNode: RootContent = { type: 'table', children: [] } as any;
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- chart: bar -->' },
+      tableNode,
+      { type: 'paragraph', children: [{ type: 'text', value: 'after' }] } as any,
+    ];
+    const { filteredNodes } = parseChartAnnotations(nodes);
+    expect(filteredNodes).toHaveLength(2);
+    expect((filteredNodes[0] as any).chartHint).toBe('bar');
+    expect(filteredNodes[1].type).toBe('paragraph');
+  });
+
+  test('warns and drops the directive when the chart type is invalid', () => {
+    const warnings: string[] = [];
+    setWarningHandler((message) => warnings.push(message));
+
+    const tableNode: RootContent = { type: 'table', children: [] } as any;
+    const nodes: RootContent[] = [{ type: 'html', value: '<!-- chart: donut -->' }, tableNode];
+    const { filteredNodes } = parseChartAnnotations(nodes);
+    setWarningHandler(null);
+
+    expect(filteredNodes).toHaveLength(1);
+    expect((filteredNodes[0] as any).chartHint).toBeUndefined();
+    expect(warnings.some((w) => w.includes('Invalid chart type "donut"'))).toBe(true);
+  });
+
+  test('warns and drops the directive when not immediately followed by a table', () => {
+    const warnings: string[] = [];
+    setWarningHandler((message) => warnings.push(message));
+
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- chart: bar -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'not a table' }] } as any,
+    ];
+    const { filteredNodes } = parseChartAnnotations(nodes);
+    setWarningHandler(null);
+
+    expect(filteredNodes).toHaveLength(1);
+    expect(filteredNodes[0].type).toBe('paragraph');
+    expect(warnings.some((w) => w.includes('must immediately precede a table'))).toBe(true);
+  });
+});
+
+describe('parseImageConfig', () => {
+  test('captures valid imageFit and imagePosition and strips both comments', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- imageFit: cover -->' },
+      { type: 'html', value: '<!-- imagePosition: left -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'body' }] } as any,
+    ];
+    const { imageFit, imagePosition, filteredNodes } = parseImageConfig(nodes);
+    expect(imageFit).toBe('cover');
+    expect(imagePosition).toBe('left');
+    expect(filteredNodes).toHaveLength(1);
+    expect(filteredNodes[0]!.type).toBe('paragraph');
+  });
+
+  test('warns and drops an invalid imageFit value', () => {
+    const warnings: string[] = [];
+    setWarningHandler((message) => warnings.push(message));
+
+    const nodes: RootContent[] = [{ type: 'html', value: '<!-- imageFit: stretch -->' }];
+    const { imageFit, filteredNodes } = parseImageConfig(nodes);
+    setWarningHandler(null);
+
+    expect(imageFit).toBeUndefined();
+    expect(filteredNodes).toHaveLength(0);
+    expect(warnings.some((w) => w.includes('Invalid imageFit "stretch"'))).toBe(true);
+  });
+
+  test('warns and drops an invalid imagePosition value', () => {
+    const warnings: string[] = [];
+    setWarningHandler((message) => warnings.push(message));
+
+    const nodes: RootContent[] = [{ type: 'html', value: '<!-- imagePosition: center -->' }];
+    const { imagePosition, filteredNodes } = parseImageConfig(nodes);
+    setWarningHandler(null);
+
+    expect(imagePosition).toBeUndefined();
+    expect(filteredNodes).toHaveLength(0);
+    expect(warnings.some((w) => w.includes('Invalid imagePosition "center"'))).toBe(true);
+  });
+});
+
+describe('parseAccentColor', () => {
+  test('captures a freeform value and strips the comment', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- accentColor: #f43f5e -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'body' }] } as any,
+    ];
+    const { accentColor, filteredNodes } = parseAccentColor(nodes);
+    expect(accentColor).toBe('#f43f5e');
+    expect(filteredNodes).toHaveLength(1);
+  });
+
+  test('returns undefined when no annotation is present', () => {
+    const nodes: RootContent[] = [
+      { type: 'paragraph', children: [{ type: 'text', value: 'body' }] } as any,
+    ];
+    const { accentColor, filteredNodes } = parseAccentColor(nodes);
+    expect(accentColor).toBeUndefined();
+    expect(filteredNodes).toHaveLength(1);
+  });
+});
+
+describe('detectAdmonition', () => {
+  test('drops the marker-only first paragraph (GitHub-style)', () => {
+    const node = {
+      type: 'blockquote',
+      children: [
+        { type: 'paragraph', children: [{ type: 'text', value: '[!TIP]' }] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'Helpful advice.' }] },
+      ],
+    };
+    const { kind, children } = detectAdmonition(node as any);
+    expect(kind).toBe('tip');
+    expect(children).toHaveLength(1);
+    expect((children[0] as any).children[0].value).toBe('Helpful advice.');
+  });
+
+  test('strips just the marker prefix when inline text follows on the same line', () => {
+    const node = {
+      type: 'blockquote',
+      children: [
+        { type: 'paragraph', children: [{ type: 'text', value: '[!WARNING] Be careful.' }] },
+      ],
+    };
+    const { kind, children } = detectAdmonition(node as any);
+    expect(kind).toBe('warning');
+    expect(children).toHaveLength(1);
+    expect((children[0] as any).children[0].value).toBe('Be careful.');
+  });
+
+  test('returns no kind for an unrecognized marker or a plain blockquote', () => {
+    const unrecognized = {
+      type: 'blockquote',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: '[!FOO] text' }] }],
+    };
+    expect(detectAdmonition(unrecognized as any).kind).toBeUndefined();
+
+    const plain = {
+      type: 'blockquote',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Just a quote.' }] }],
+    };
+    expect(detectAdmonition(plain as any).kind).toBeUndefined();
+  });
+});
+
 describe('Normalize Note', () => {
   test('extractSlideNotes extracts notes between comments', () => {
     const nodes: RootContent[] = [
@@ -210,6 +455,42 @@ describe('Normalize Note', () => {
     expect(notes).toBe('Note text 1\nNote text 2');
     expect(remainingNodes).toHaveLength(1);
     expect(remainingNodes[0].type).toBe('paragraph');
+  });
+
+  test('extractSlideNotes matches notes markers case-insensitively, like other directives', () => {
+    const nodes: RootContent[] = [
+      { type: 'html', value: '<!-- NOTES -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Note text' }] },
+      { type: 'html', value: '<!--   /Notes   -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Slide content' }] },
+    ];
+
+    const { notes, remainingNodes } = extractSlideNotes(nodes);
+    expect(notes).toBe('Note text');
+    expect(remainingNodes).toHaveLength(1);
+    expect(remainingNodes[0].type).toBe('paragraph');
+  });
+
+  test('extractSlideNotes warns and preserves content when the notes block is never closed', () => {
+    const warnings: string[] = [];
+    setWarningHandler((message) => warnings.push(message));
+
+    const nodes: RootContent[] = [
+      { type: 'paragraph', children: [{ type: 'text', value: 'Visible intro' }] },
+      { type: 'html', value: '<!-- notes -->' },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Meant to be a note' }] },
+      { type: 'heading', depth: 3, children: [{ type: 'text', value: 'Stranded Heading' }] },
+    ];
+
+    const { notes, remainingNodes } = extractSlideNotes(nodes);
+    setWarningHandler(null);
+
+    // No closing marker was found, so nothing should be silently dropped.
+    expect(notes).toBeUndefined();
+    expect(remainingNodes).toHaveLength(3);
+    expect(remainingNodes[1].type).toBe('paragraph');
+    expect(remainingNodes[2].type).toBe('heading');
+    expect(warnings.some((w) => w.includes('Unclosed') && w.includes('notes'))).toBe(true);
   });
 });
 
@@ -245,6 +526,41 @@ describe('toSlideAstNode', () => {
     expect(slideNode.children?.[0].type).toBe('tableRow');
     expect(slideNode.children?.[0].children?.[0].header).toBe(true);
     expect(slideNode.children?.[1].children?.[0].header).toBeFalsy();
+  });
+
+  test('converts a table carrying a chartHint into a chart-flagged SlideNode', () => {
+    const tableNode: RootContent = {
+      type: 'table',
+      children: [],
+      // Attached by parseChartAnnotations before this node reaches toSlideAstNode.
+      chartHint: 'bar',
+    } as any;
+    const slideNode = toSlideAstNode(tableNode);
+    expect(slideNode.chart).toBe('bar');
+  });
+
+  test('converts a GitHub-style admonition blockquote, dropping the marker paragraph', () => {
+    const blockquoteNode: RootContent = {
+      type: 'blockquote',
+      children: [
+        { type: 'paragraph', children: [{ type: 'text', value: '[!TIP]' }] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'Helpful advice.' }] },
+      ] as any,
+    };
+    const slideNode = toSlideAstNode(blockquoteNode);
+    expect(slideNode.admonition).toBe('tip');
+    expect(slideNode.children).toHaveLength(1);
+  });
+
+  test('converts a plain blockquote with no admonition field', () => {
+    const blockquoteNode: RootContent = {
+      type: 'blockquote',
+      children: [
+        { type: 'paragraph', children: [{ type: 'text', value: 'Just a quote.' }] },
+      ] as any,
+    };
+    const slideNode = toSlideAstNode(blockquoteNode);
+    expect(slideNode.admonition).toBeUndefined();
   });
 });
 
@@ -296,5 +612,24 @@ describe('normalizeSlides', () => {
     const slides = normalizeSlides(rawBlocks);
     expect(slides).toHaveLength(1);
     expect(slides[0].id).toBe('2');
+  });
+
+  test('applies frontmatter align as a default, overridable per slide', () => {
+    const rawBlocks: RawSlideBlock[] = [
+      {
+        id: 'no-override',
+        nodes: [{ type: 'paragraph', children: [{ type: 'text', value: 'Body' }] }],
+      },
+      {
+        id: 'with-override',
+        nodes: [
+          { type: 'html', value: '<!-- align: bottom -->' },
+          { type: 'paragraph', children: [{ type: 'text', value: 'Body' }] },
+        ],
+      },
+    ];
+    const slides = normalizeSlides(rawBlocks, { align: 'middle' });
+    expect(slides[0].align).toBe('center');
+    expect(slides[1].align).toBe('bottom');
   });
 });

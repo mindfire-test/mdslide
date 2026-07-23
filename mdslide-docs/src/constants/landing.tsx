@@ -96,3 +96,12 @@ export const THEMES: ThemeEntry[] = [
   { id: 'corporate', name: 'Corporate', desc: ['Sleek deep navy blue', 'Silver text accents', 'Polished presentations'], style: 'themePreview_corporate' },
   { id: 'solarized', name: 'Solarized', desc: ['Gentle warm cyan canvas', 'Amber accent borders', 'Solarized color palettes'], style: 'themePreview_solarized' },
 ];
+
+export const INSTALL_OPTIONS = [
+  { id: 'unix', label: 'macOS / Linux', cmd: 'curl -fsSL https://mindfiredigital.github.io/mdslide/installer | bash' },
+  { id: 'windows', label: 'Windows', cmd: 'irm https://mindfiredigital.github.io/mdslide/installer.ps1 | iex' },
+  { id: 'bun', label: 'bun', cmd: 'bun add -g @mindfiredigital/mdslide-cli' },
+  { id: 'npm', label: 'npm', cmd: 'npm install -g @mindfiredigital/mdslide-cli' },
+  { id: 'pnpm', label: 'pnpm', cmd: 'pnpm add -g @mindfiredigital/mdslide-cli' },
+  { id: 'yarn', label: 'yarn', cmd: 'yarn global add @mindfiredigital/mdslide-cli' },
+];

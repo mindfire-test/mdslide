@@ -5,6 +5,7 @@ import { RawSlideBlock } from '../interfaces/index.js';
 import { isHeading } from '../parser/index.js';
 import { normalizeHeading } from './normalizeHeading.js';
 import { extractSlideNotes } from './normalizeNote.js';
+import { detectAdmonition } from './normalizeAdmonition.js';
 import {
   parseLayoutOveride,
   resolveSlideLayout,
@@ -15,6 +16,12 @@ import {
   normalizeAnimation,
   parseFontSizeConfig,
   normalizeFontSize,
+  parseContentAlign,
+  normalizeVerticalPosition,
+  parseColumnsConfig,
+  parseChartAnnotations,
+  parseImageConfig,
+  parseAccentColor,
 } from './normalizeLayout.js';
 
 // Converts generic MDAST node into Slide AST Node
@@ -34,6 +41,16 @@ export function toSlideAstNode(node: RootContent, isTableHeader = false): SlideN
     return createSlideNode({
       type: 'table',
       children,
+      chart: 'chartHint' in node ? (node as any).chartHint : undefined,
+    });
+  }
+
+  if (node.type === 'blockquote') {
+    const { kind, children: adjustedChildren } = detectAdmonition(node as any);
+    return createSlideNode({
+      type: 'blockquote',
+      children: adjustedChildren.map((child: any) => toSlideAstNode(child, isTableHeader)),
+      admonition: kind,
     });
   }
 
@@ -78,10 +95,27 @@ export function normalizeSlide(rawBlock: RawSlideBlock): Slide {
     parseFontSizeConfig(nodesWithoutAnim);
   const fontSize = normalizeFontSize(parsedFontSize);
 
+  const { align, filteredNodes: nodesWithoutAlign } = parseContentAlign(nodesWithoutFontSize);
+
+  const {
+    imageFit,
+    imagePosition,
+    filteredNodes: nodesWithoutImageConfig,
+  } = parseImageConfig(nodesWithoutAlign);
+
+  const { accentColor, filteredNodes: nodesWithoutAccentColor } =
+    parseAccentColor(nodesWithoutImageConfig);
+
+  const { columnsConfig, filteredNodes: nodesWithoutColumns } =
+    parseColumnsConfig(nodesWithoutAccentColor);
+
+  const { filteredNodes: nodesWithoutChartAnnotations } =
+    parseChartAnnotations(nodesWithoutColumns);
+
   let slideTitle: string | undefined;
   const slideContent: SlideNode[] = [];
 
-  for (const node of nodesWithoutFontSize) {
+  for (const node of nodesWithoutChartAnnotations) {
     if (isHeading(node)) {
       const headingNode = node as Heading;
       const normalized = normalizeHeading(headingNode);
@@ -119,6 +153,11 @@ export function normalizeSlide(rawBlock: RawSlideBlock): Slide {
     overflow,
     animation,
     fontSize,
+    align,
+    columnsConfig,
+    imageFit,
+    imagePosition,
+    accentColor,
   });
 }
 
@@ -156,6 +195,10 @@ export function normalizeSlides(
         const fontSizeVal = meta.fontSize ?? meta['font-size'] ?? meta.font_size;
         if (fontSizeVal && !slide.fontSize) {
           slide.fontSize = normalizeFontSize(fontSizeVal);
+        }
+        const alignVal = meta.align;
+        if (alignVal && !slide.align) {
+          slide.align = normalizeVerticalPosition(String(alignVal));
         }
       }
       return slide;

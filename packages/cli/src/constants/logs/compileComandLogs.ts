@@ -72,4 +72,6 @@ export const COMPILE_MESSAGES = {
         : `  ${slideCount} slide${slideCount !== 1 ? 's' : ''}`;
     return `${relativePath}  ${summaryText}`;
   },
+  DRY_RUN_SUMMARY: (relativePath: string, slideCount: number, warningCount: number) =>
+    `[dry-run] would write ${relativePath}  (${slideCount} slide${slideCount !== 1 ? 's' : ''}, ${warningCount} warning${warningCount !== 1 ? 's' : ''})`,
 } as const;

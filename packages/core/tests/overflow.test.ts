@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { processOverflow } from '../src/overflow/index.ts';
+import { processOverflow, estimateSlideContentHeight } from '../src/overflow/index.ts';
 import { createSlide, createSlideNode } from '../src/ast/createSlideNode.ts';
 import type { Slide } from '@mindfiredigital/mdslide-shared';
 
@@ -20,6 +20,58 @@ describe('Overflow Engine', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('slide-1');
     expect(result[0].title).toBe('Short Slide');
+  });
+
+  test('estimateSlideContentHeight scales with the slide font size', () => {
+    const nodes = [
+      createSlideNode({
+        type: 'paragraph',
+        children: [
+          createSlideNode({
+            type: 'text',
+            value: 'A reasonably long sentence used to measure wrap-based height.',
+          }),
+        ],
+      }),
+    ];
+
+    const mdHeight = estimateSlideContentHeight(nodes);
+    const xsHeight = estimateSlideContentHeight(nodes, 'xs');
+    const xxlHeight = estimateSlideContentHeight(nodes, 'xxl');
+
+    expect(xsHeight).toBeLessThan(mdHeight);
+    expect(xxlHeight).toBeGreaterThan(mdHeight);
+  });
+
+  test('a slide with xxl fontSize overflows sooner than the same content at md', () => {
+    // Two paragraphs (~285px each at md scale) fit together under
+    // MAX_CONTENT_HEIGHT (650) at md, but xxl's 1.35x scale (~385px each,
+    // ~770px combined) pushes the pair over budget and forces a split.
+    const words = Array(110).fill('word').join(' ');
+    const content = [
+      createSlideNode({
+        type: 'paragraph',
+        children: [createSlideNode({ type: 'text', value: words })],
+      }),
+      createSlideNode({
+        type: 'paragraph',
+        children: [createSlideNode({ type: 'text', value: words })],
+      }),
+    ];
+
+    const mdSlide = createSlide({ id: 'slide-md', overflow: 'split', content });
+    const xxlSlide = createSlide({
+      id: 'slide-xxl',
+      overflow: 'split',
+      fontSize: 'xxl',
+      content,
+    });
+
+    const mdResult = processOverflow([mdSlide]);
+    const xxlResult = processOverflow([xxlSlide]);
+
+    expect(mdResult).toHaveLength(1);
+    expect(xxlResult.length).toBeGreaterThan(mdResult.length);
   });
 
   test('splits long code block when height budget is exceeded', () => {
@@ -77,6 +129,39 @@ describe('Overflow Engine', () => {
     expect(result[0].title).toBe('Long List');
     expect(result[1].id).toBe('slide-list-cont-p1');
     expect(result[1].title).toBe('Long List (Cont.)');
+  });
+
+  test('preserves imageFit/imagePosition/accentColor/align/columnsConfig across a split', () => {
+    const listItems = Array(35)
+      .fill(null)
+      .map((_, i) =>
+        createSlideNode({
+          type: 'listItem',
+          children: [createSlideNode({ type: 'text', value: `List item number ${i}` })],
+        })
+      );
+
+    const slide = createSlide({
+      id: 'slide-media',
+      title: 'Media Slide',
+      overflow: 'split',
+      imageFit: 'cover',
+      imagePosition: 'left',
+      accentColor: '#f43f5e',
+      align: 'center',
+      columnsConfig: { count: 2 },
+      content: [createSlideNode({ type: 'list', children: listItems })],
+    });
+
+    const result = processOverflow([slide]);
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    for (const s of result) {
+      expect(s.imageFit).toBe('cover');
+      expect(s.imagePosition).toBe('left');
+      expect(s.accentColor).toBe('#f43f5e');
+      expect(s.align).toBe('center');
+      expect(s.columnsConfig).toEqual({ count: 2 });
+    }
   });
 
   test('splits general flat content slide when height budget is exceeded', () => {

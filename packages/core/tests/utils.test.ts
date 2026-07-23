@@ -59,20 +59,22 @@ describe('Utility - extractTextLength', () => {
 });
 
 describe('Utility - getNodeWeight', () => {
-  test('assigns weight of 2 to headings', () => {
+  test('scales heading weight with its text length instead of a flat constant', () => {
     const heading: RootContent = { type: 'heading', depth: 1, children: [] };
-    expect(getNodeWeight(heading)).toBe(2);
+    // height = (0 wrapLines * 65 + 20) = 20px -> ceil(20 / 81.25) = 1
+    expect(getNodeWeight(heading)).toBe(1);
   });
 
-  test('assigns weight to paragraphs based on word count', () => {
-    // 0 to 20 words = weight 1
+  test('assigns weight to paragraphs based on text length', () => {
+    // height = (ceil(10/65)=1 wrapLine * 30 + 15) = 45px -> ceil(45/81.25) = 1
     const p1: RootContent = {
       type: 'paragraph',
       children: [{ type: 'text', value: 'short text' }] as any,
     };
     expect(getNodeWeight(p1)).toBe(1);
 
-    // 21 to 40 words = weight 2
+    // 30 "word"s + 29 spaces = 149 chars -> ceil(149/65)=3 wrapLines * 30 + 15
+    // = 105px -> ceil(105/81.25) = 2
     const longText = Array(30).fill('word').join(' ');
     const p2: RootContent = {
       type: 'paragraph',
@@ -81,7 +83,9 @@ describe('Utility - getNodeWeight', () => {
     expect(getNodeWeight(p2)).toBe(2);
   });
 
-  test('assigns weight to list matching children count', () => {
+  test('assigns weight to list based on summed listItem heights, not raw item count', () => {
+    // list base (15px) + 3 empty listItems (each (max(30,0)+10)=40px) = 135px
+    // -> ceil(135/81.25) = 2
     const list: RootContent = {
       type: 'list',
       children: [
@@ -90,23 +94,26 @@ describe('Utility - getNodeWeight', () => {
         { type: 'listItem', children: [] },
       ] as any,
     };
-    expect(getNodeWeight(list)).toBe(3);
+    expect(getNodeWeight(list)).toBe(2);
   });
 
-  test('assigns weight of 4 to table', () => {
+  test('assigns weight to table based on row count, not a flat constant', () => {
+    // height = 35 + 0 rows * 38 = 35px -> ceil(35/81.25) = 1
     const table: RootContent = { type: 'table', children: [] };
-    expect(getNodeWeight(table)).toBe(4);
+    expect(getNodeWeight(table)).toBe(1);
   });
 
-  test('assigns weight to code based on lines count', () => {
-    const code1: RootContent = { type: 'code', value: 'line1\nline2' }; // 2 lines -> 1 weight
-    expect(getNodeWeight(code1)).toBe(1);
+  test('assigns weight to code based on line count', () => {
+    // 2 lines -> height = 50 + 2*24 = 98px -> ceil(98/81.25) = 2
+    const code1: RootContent = { type: 'code', value: 'line1\nline2' };
+    expect(getNodeWeight(code1)).toBe(2);
 
-    const code2: RootContent = { type: 'code', value: Array(12).fill('line').join('\n') }; // 12 lines -> 12/5 = 2.4 -> weight 3
-    expect(getNodeWeight(code2)).toBe(3);
+    // 12 lines -> height = 50 + 12*24 = 338px -> ceil(338/81.25) = 5
+    const code2: RootContent = { type: 'code', value: Array(12).fill('line').join('\n') };
+    expect(getNodeWeight(code2)).toBe(5);
   });
 
-  test('assigns default weight of 1 to other nodes', () => {
+  test('assigns default weight of 1 to other empty nodes', () => {
     const other: RootContent = { type: 'thematicBreak' };
     expect(getNodeWeight(other)).toBe(1);
   });

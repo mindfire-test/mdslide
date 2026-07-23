@@ -4,6 +4,11 @@ export type LogLevel = 'silent' | 'info' | 'verbose';
 
 export interface GlobalOptions {
   logLevel?: LogLevel;
+  json?: boolean;
+  dryRun?: boolean;
+  yes?: boolean;
+  noInput?: boolean;
+  timeoutMs?: number;
 }
 
 export interface CompileOptions extends GlobalOptions {
@@ -14,6 +19,7 @@ export interface CompileOptions extends GlobalOptions {
   strict?: boolean;
   pdfTimeoutMs?: number;
   pptxMode?: 'screenshot' | 'editable';
+  assetUrls?: Record<string, string>;
 }
 
 export interface WatchOptions extends GlobalOptions {
@@ -30,10 +36,6 @@ export interface ServeOptions extends GlobalOptions {
 
 export interface InitOptions extends GlobalOptions {
   force?: boolean;
-}
-
-export interface ValidateOptions extends GlobalOptions {
-  strict?: boolean;
 }
 
 export interface CompileResult {
@@ -62,8 +64,49 @@ export interface InteractiveResult {
 export interface ValidationIssue {
   type: 'error' | 'warning';
   slide?: number;
+  line?: number;
   message: string;
   hint?: string;
+  fixable?: boolean;
+}
+
+export interface ValidateOptions extends GlobalOptions {
+  strict?: boolean;
+  fix?: boolean;
+}
+
+export type InspectOptions = GlobalOptions;
+
+export interface ScreenshotOptions extends GlobalOptions {
+  theme?: string;
+  output?: string;
+  width?: number;
+  height?: number;
+  slide?: number;
+}
+
+export interface InspectSlide {
+  index: number;
+  id: string;
+  title?: string;
+  layout: string;
+  layoutSource: 'override' | 'auto';
+  layoutReason: string;
+  elementCounts: Record<string, number>;
+  contentHeightPx: number;
+  maxHeightPx: number;
+  overflowing: boolean;
+  hasNotes: boolean;
+
+  columns?: { layout: string }[];
+
+  admonitions?: string[];
+
+  charts?: string[];
+  imageFit?: string;
+  imagePosition?: string;
+  accentColor?: string;
+  hasVideo?: boolean;
 }
 
 export interface MdSlideConfig {
@@ -96,12 +139,28 @@ export interface ScreenshotPptxOptions {
   baseDir?: string;
 }
 
+export interface ScreenshotExportOptions {
+  chromePath?: string;
+  timeoutMs?: number;
+  width?: number;
+  height?: number;
+  theme?: string;
+  baseDir?: string;
+  slide?: number;
+}
+
 export interface PptxTheme {
   bg: string;
   text: string;
+  muted: string;
   accent: string;
+  accent2: string;
   font: string;
   cardBg: string;
+  border: string;
+  titleTextColor?: string;
+  titleBackgroundCss?: string;
+  slideBackgroundCss?: string;
 }
 
 // Flatten list structure to structured lines
@@ -109,4 +168,43 @@ export interface FlatListLine {
   text: any[];
   bullet: boolean;
   indent: number;
+  ordered: boolean;
+  numberIndex: number;
+}
+
+export interface GlobalFlags {
+  json: boolean;
+  dryRun: boolean;
+  yes: boolean;
+  noInput: boolean;
+  timeoutMs: number | undefined;
+  logLevel: LogLevel;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface BlockLayoutOptions {
+  pptx: any;
+  pptxSlide: any;
+  theme: PptxTheme;
+  baseDir?: string;
+  fontScale: number;
+  isDarkTheme: boolean;
+  imageFit?: 'contain' | 'cover';
+  disableRaster?: boolean;
+}
+
+export interface TitleContentLayout {
+  titleRect: Rect | null;
+  contentRect: Rect;
+}
+
+export interface ReportErrorOptions {
+  json?: boolean;
+  isStdoutOutput?: boolean;
 }

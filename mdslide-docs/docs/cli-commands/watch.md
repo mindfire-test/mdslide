@@ -26,6 +26,12 @@ mdslide watch slides.md --port 4000 --open
 
 # Override default theme settings during preview
 mdslide watch slides.md --theme Notion
+
+# Compile once to confirm the deck is valid, without starting the server
+mdslide watch slides.md --dry-run
+
+# Machine-readable startup + recompile events
+mdslide watch slides.md --json
 ```
 
 ---
@@ -41,6 +47,39 @@ Below is the list of flags available for the `watch` command:
 | **`--open`**          | -     | `boolean` | `false`          | Automatically launch the web browser and open the preview page on startup.                                           |
 | **`--verbose`**       | -     | `boolean` | `false`          | Outputs detailed compiler and web socket logs in the console.                                                        |
 | **`--silent`**        | -     | `boolean` | `false`          | Suppresses all logging output.                                                                                       |
+
+This command also accepts the [global flags](./global-flags.md) (`--json`, `--no-input`, `--yes`, `--dry-run`, `--timeout`); `--json` and `--dry-run` have watch-specific behavior described below.
+
+:::note Stdin is not supported
+`watch` always needs a real file on disk to keep watching for changes, so passing `-` as `<input-file>` is rejected with `ERR_STDIN_UNSUPPORTED`. Save the deck to a file and pass its path instead.
+:::
+
+---
+
+## Dry Run Mode (`--dry-run`)
+
+Passing `--dry-run` compiles the deck once to prove it is valid and prints
+the result, but never starts the HTTP/live-reload server. This is useful in
+CI or agent workflows that just want to confirm a deck watches cleanly
+without holding a process open.
+
+## Machine-Readable Output (`--json`)
+
+With `--json`, the server startup line is a single JSON object on stdout:
+
+```json
+{ "success": true, "url": "http://localhost:3500", "port": 3500, "watching": "/abs/path/slides.md" }
+```
+
+After that, every recompile triggered by a save prints one compact JSON line
+to stdout (the whole stream is [NDJSON](https://github.com/ndjson/ndjson-spec)) so a supervising process can tell what each edit did without polling:
+
+```json
+{"event":"recompile","success":true,"slides":5,"warnings":[]}
+{"event":"recompile","success":false,"error":"Unclosed code fence.","code":"ERR_COMPILE"}
+```
+
+With `--dry-run --json`, the one-shot compile result is printed instead of the startup line: `{ "file", "success": true, "dryRun": true, "slides": <count> }`, and the process exits without starting the server.
 
 ---
 
