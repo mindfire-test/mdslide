@@ -1,7 +1,7 @@
 import path from 'path';
 import { Logger } from '../logger/index.js';
 import { Spinner } from '../ui/spinner.js';
-import { CompileError } from '../middleware/errors.js';
+import { CompileError, reportCommandError } from '../middleware/errors.js';
 import type { ScreenshotOptions } from '../types/index.js';
 import { compileToScreenshots } from '../exports/screenshotExporter.js';
 import { isStdio } from '../utils/index.js';
@@ -12,27 +12,6 @@ export async function screenshotCommand(inputFile: string, opts: ScreenshotOptio
   const log = new Logger(opts.json ? 'silent' : (opts.logLevel ?? 'info'));
   const spinner = new Spinner(log);
   const absInput = isStdin ? '<stdin>' : path.resolve(inputFile);
-
-  const reportError = (err: unknown): void => {
-    const e = err instanceof Error ? err : new Error(String(err));
-    if (opts.json) {
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            file: absInput,
-            success: false,
-            error: e.message,
-            code: (e as any).code,
-            hint: (e as any).hint,
-          },
-          null,
-          2
-        )}\n`
-      );
-    } else {
-      log.error(err);
-    }
-  };
 
   spinner.start(`Compiling ${isStdin ? '<stdin>' : path.basename(absInput)}...`);
 
@@ -46,7 +25,7 @@ export async function screenshotCommand(inputFile: string, opts: ScreenshotOptio
     warnings = result.warnings;
   } catch (err) {
     spinner.fail();
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -56,7 +35,7 @@ export async function screenshotCommand(inputFile: string, opts: ScreenshotOptio
       `--slide ${opts.slide} is out of range: this deck has ${slideCount} slide${slideCount === 1 ? '' : 's'}.`,
       { file: absInput }
     );
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -78,7 +57,7 @@ export async function screenshotCommand(inputFile: string, opts: ScreenshotOptio
       });
     } catch (err) {
       spinner.fail();
-      reportError(err);
+      reportCommandError(err, opts, absInput, log);
       throw err;
     }
   }

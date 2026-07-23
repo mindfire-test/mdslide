@@ -6,7 +6,12 @@ import chokidar from 'chokidar';
 import { Logger } from '../logger/index.js';
 import { Spinner } from '../ui/spinner.js';
 import { onShutdown } from '../middleware/signals.js';
-import { InputNotFoundError, PortInUseError, StdinUnsupportedError } from '../middleware/errors.js';
+import {
+  InputNotFoundError,
+  PortInUseError,
+  reportCommandError,
+  StdinUnsupportedError,
+} from '../middleware/errors.js';
 import { runCompile } from './compile.js';
 import type { WatchOptions } from '../types/index.js';
 import { link, createStaticServer, isStdio } from '../utils/index.js';
@@ -39,23 +44,12 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
   const log = new Logger(opts.json ? 'silent' : (opts.logLevel ?? 'info'));
   const absInput = path.resolve(inputFile);
 
-  const reportError = (err: unknown): void => {
-    if (opts.json) {
-      const e = err instanceof Error ? err : new Error(String(err));
-      process.stdout.write(
-        `${JSON.stringify({ file: absInput, success: false, error: e.message, code: (e as any).code }, null, 2)}\n`
-      );
-    } else {
-      log.error(err);
-    }
-  };
-
   if (isStdio(inputFile)) {
     const err = new StdinUnsupportedError(
       'watch does not support stdin input: there is nothing on disk to watch for changes.',
       'Save the deck to a file and pass its path, e.g. mdslide watch slides.md'
     );
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -63,7 +57,7 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
     await fs.promises.access(absInput);
   } catch {
     const err = new InputNotFoundError(absInput);
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -81,7 +75,7 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
     spinner.succeed(WATCH_MESSAGES.SPINNER_READY);
   } catch (err) {
     spinner.fail(WATCH_MESSAGES.SPINNER_FAIL);
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -106,7 +100,7 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
   try {
     port = await findPort(preferredPort);
   } catch (err) {
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -161,7 +155,7 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
       resolve();
     });
   }).catch((err) => {
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   });
 

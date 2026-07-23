@@ -1,6 +1,6 @@
 import path from 'path';
 import { Logger } from '../logger/index.js';
-import { CompileError } from '../middleware/errors.js';
+import { CompileError, reportCommandError } from '../middleware/errors.js';
 import type { InspectOptions, InspectSlide } from '../types/index.js';
 import { COLORS, STYLES } from '../constants/index.js';
 import { ICONS, isStdio, readInputSource } from '../utils/index.js';
@@ -107,33 +107,12 @@ export async function inspectCommand(inputFile: string, opts: InspectOptions): P
   const log = new Logger(opts.json ? 'silent' : (opts.logLevel ?? 'info'));
   const absInput = isStdio(inputFile) ? '<stdin>' : path.resolve(inputFile);
 
-  const reportError = (err: unknown): void => {
-    if (opts.json) {
-      const e = err instanceof Error ? err : new Error(String(err));
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            file: absInput,
-            success: false,
-            error: e.message,
-            code: (e as any).code,
-            hint: (e as any).hint,
-          },
-          null,
-          2
-        )}\n`
-      );
-    } else {
-      log.error(err);
-    }
-  };
-
   let core: typeof import('@mindfiredigital/mdslide-core');
   try {
     core = await import('@mindfiredigital/mdslide-core');
   } catch {
     const err = new CompileError('Could not load @mindfiredigital/mdslide-core.', {});
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -141,7 +120,7 @@ export async function inspectCommand(inputFile: string, opts: InspectOptions): P
   try {
     markdown = await readInputSource(inputFile);
   } catch (err) {
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -156,7 +135,7 @@ export async function inspectCommand(inputFile: string, opts: InspectOptions): P
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const e = new CompileError(message, { file: absInput });
-    reportError(e);
+    reportCommandError(err, opts, absInput, log);
     throw e;
   }
 

@@ -2,7 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { Logger } from '../logger/index.js';
 import { Spinner } from '../ui/spinner.js';
-import { InvalidFormatError, CompileError, StdoutOutputError } from '../middleware/errors.js';
+import {
+  InvalidFormatError,
+  CompileError,
+  StdoutOutputError,
+  reportCommandError,
+} from '../middleware/errors.js';
 import type { CompileOptions, OutputFormat } from '../types/index.js';
 import { RELOAD_SCRIPT } from '../script/reloadScript.js';
 import { COMPILE_CONFIG, COMPILE_MESSAGES } from '../constants/index.js';
@@ -97,34 +102,11 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
   const spinner = new Spinner(log);
   const absInput = isStdin ? '<stdin>' : path.resolve(inputFile);
 
-  const reportError = (err: unknown): void => {
-    const e = err instanceof Error ? err : new Error(String(err));
-    if (opts.json) {
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            file: absInput,
-            success: false,
-            error: e.message,
-            code: (e as any).code,
-            hint: (e as any).hint,
-          },
-          null,
-          2
-        )}\n`
-      );
-    } else if (isStdoutOutput) {
-      process.stderr.write(`${e.message}\n`);
-    } else {
-      log.error(err);
-    }
-  };
-
   let format: OutputFormat;
   try {
     format = detectFormat(opts.output, opts.format);
   } catch (err) {
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -132,7 +114,7 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
     const err = new StdoutOutputError(
       `Cannot stream "${format}" output to stdout - only html supports it.`
     );
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -156,7 +138,7 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
     deck = { slides: compileResult.slides, meta: compileResult.meta };
   } catch (err) {
     spinner.fail();
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -195,7 +177,7 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
     }
   } catch (err) {
     spinner.fail();
-    reportError(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
