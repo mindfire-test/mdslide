@@ -17,6 +17,10 @@ import { ICONS, STDIO_PLACEHOLDER } from './utils/index.js';
 import { COLORS, STYLES } from './constants/terminalEscapeCode.js';
 import { type GlobalFlags } from './types/index.js';
 
+function normalizeStdinInput(input: string): string {
+  return input === '-' ? STDIO_PLACEHOLDER : input;
+}
+
 const require = createRequire(import.meta.url);
 
 let version = '0.0.0';
@@ -148,6 +152,7 @@ cli
   .example(`  mdslide compile slides.md --asset-urls '{"katexCss":"/vendor/katex.css"}'`)
   .example('  cat slides.md | mdslide compile - -o - -f html   # stdin -> stdout')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     const assetUrls = parseAssetUrlsFlag(opts.assetUrls, g.json);
     if (opts.interactive && !g.noInput) {
@@ -198,6 +203,7 @@ cli
   .example('  mdslide watch slides.md')
   .example('  mdslide watch slides.md --port 4000 --open')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     await watchCommand(input, {
       theme: opts.theme,
@@ -236,6 +242,7 @@ cli
   .example('  mdslide validate slides.md --fix')
   .example('  cat slides.md | mdslide validate - --json   # read from stdin')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     await validateCommand(input, {
       strict: opts.strict ?? false,
@@ -253,6 +260,7 @@ cli
   .example('  mdslide inspect slides.md')
   .example('  mdslide inspect slides.md --json')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     await inspectCommand(input, { ...g }).catch(() => process.exit(1));
   });
@@ -274,6 +282,7 @@ cli
   .example('  mdslide screenshot slides.md -o ./previews')
   .example('  mdslide screenshot slides.md --slide 3 --json')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     await screenshotCommand(input, {
       theme: opts.theme,
@@ -307,6 +316,7 @@ cli
   .option('--silent', 'Suppress all output')
   .example('  mdslide interactive slides.md')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     const answers = await runInteractivePrompt(input, {
       auto: g.yes || g.noInput,
@@ -355,6 +365,7 @@ cli
   .example('  mdslide slides.md -i                  # Explicit interactive mode')
   .example('  mdslide slides.md -t dark --open      # Manual flags mode (bypasses wizard)')
   .action(async (input: string, opts: any) => {
+    input = normalizeStdinInput(input);
     const g = globalsOf(opts);
     const assetUrls = parseAssetUrlsFlag(opts.assetUrls, g.json);
     const hasFlags = opts.theme || opts.output || opts.format || opts.watch || opts.open;
@@ -414,8 +425,7 @@ try {
     process.exit(0);
   }
 
-  const argv = process.argv.map((arg) => (arg === '-' ? STDIO_PLACEHOLDER : arg));
-  cli.parse(argv);
+  cli.parse(process.argv);
 } catch (err: any) {
   const log = new Logger('info');
   log.raw('');
