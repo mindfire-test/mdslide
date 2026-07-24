@@ -125,16 +125,6 @@ if (isRunDirectly) {
   }
 
   // Get list of modified files in the latest commit.
-  //
-  // NOTE: `git diff-tree -r HEAD` only works reliably for commits with a
-  // single parent. A merge commit (e.g. created when a PR is merged into
-  // `dev`) has TWO parents, and in that case `git diff-tree -r HEAD` prints
-  // nothing rather than guessing which parent to diff against. To handle
-  // merge commits correctly, we diff explicitly against the first parent
-  // (`HEAD^1`), which is the tip of the target branch before the merge.
-  // This also works fine for regular single-parent commits, since HEAD^1
-  // is just their one parent. The fallback handles the rare root-commit
-  // case where HEAD^1 doesn't exist at all.
   let modifiedFiles: string[] = [];
   try {
     modifiedFiles = execSync('git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD')
