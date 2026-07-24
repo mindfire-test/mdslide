@@ -28,7 +28,7 @@
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@types/node": "^25.5.0",
-    "@vitest/coverage-v8": "4.1.4",
+    "@vitest/coverage-v8": "4.1.7",
     "cypress": "^15.17.0",
     "eslint": "^10.1.0",
     "globals": "^17.4.0",
@@ -40,7 +40,7 @@
     "turbo": "^2.9.18",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
-    "vitest": "^4.1.0"
+    "vitest": "4.1.7"
   },
   "lint-staged": {
     "**/*.{js,ts}": [
