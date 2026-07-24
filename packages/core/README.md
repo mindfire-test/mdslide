@@ -2,6 +2,38 @@
 
 The core compilation, normalization, and rendering engine for `mdslide`. It orchestrates the transformation of a parsed Markdown AST into interactive, styled slide decks.
 
+## Quick Start
+
+Install the package:
+
+```bash
+npm install @mindfiredigital/mdslide-core
+# or
+bun add @mindfiredigital/mdslide-core
+```
+
+Use the `Compiler` class to compile a Markdown string into an HTML slide deck:
+
+```typescript
+import { Compiler } from '@mindfiredigital/mdslide-core';
+
+const compiler = new Compiler();
+const html = await compiler.compile(`
+# Hello World
+
+Welcome to mdslide!
+
+---
+
+## Slide Two
+
+- Bullet one
+- Bullet two
+`);
+
+console.log(html); // Full HTML presentation output
+```
+
 ## Compiler Architecture & Pipeline Flow
 
 The compilation process is managed by the central `Compiler` class and flows through the following pipeline:
