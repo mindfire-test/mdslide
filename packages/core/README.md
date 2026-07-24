@@ -1,6 +1,6 @@
 # @mindfiredigital/mdslide-core
 
-The core compilation, normalization, and rendering engine for `mdslide`. It orchestrates the transformation of a parsed Markdown AST into interactive, styled slide decks.
+The core compilation, normalization, and rendering engine for `mdslide`. It orchestrates the transformation of a parsed Markdown AST into interactive, styled, and exportable slide decks.
 
 ## Compiler Architecture & Pipeline Flow
 
