@@ -102,7 +102,17 @@ To prevent contents from bleeding out of the viewport, the overflow engine calcu
 
 Injects styling systems:
 
-- Resolves base styles (like 1080p slide margins, transitions, and docks) and integrates custom CSS variables for predefined themes (`light`, `dark`, `notion`, `terminal`, `gradient`, `corporate`, `solarized`).
+- Resolves base styles (like 1080p slide margins, transitions, and docks) and integrates custom CSS variables for predefined themes:
+
+| Theme        | Description                                              |
+|--------------|----------------------------------------------------------|
+| `light`      | Clean white background with dark text. Default theme.   |
+| `dark`       | Dark background with light text for low-light settings. |
+| `notion`     | Minimal, Notion-inspired serif typography.               |
+| `terminal`   | Monospace green-on-black terminal aesthetic.             |
+| `gradient`   | Vibrant gradient backgrounds with bold typography.       |
+| `corporate`  | Professional, neutral palette for business presentations.|
+| `solarized`  | Warm solarized color scheme, easy on the eyes.          |
 
 ---
 
