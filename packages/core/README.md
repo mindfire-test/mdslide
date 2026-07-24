@@ -235,7 +235,7 @@ Here are my speaker notes for this slide.
     $$
     ```
 - **Mermaid Diagrams**:
-  - Render flowcharts, sequence diagrams, and class diagrams directly on slides using `mermaid` fenced code blocks:
+  - Render flowcharts, sequence diagrams, state diagrams, and more directly on your slides using `mermaid` fenced code blocks. This integration leverages Mermaid.js for dynamic, text-based diagram generation:
 
     ````markdown
     ```mermaid
