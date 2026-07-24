@@ -4,6 +4,12 @@ export function isThematicBreak(node: RootContent): boolean {
   return node.type === 'thematicBreak';
 }
 
+// Explicit slide-break marker: always starts a new slide, independent of the
+// heading-based heuristics in markdownParser.ts.
+export function isSlideMarker(node: RootContent): boolean {
+  return node.type === 'html' && /^<!--\s*slide\s*-->$/i.test((node as any).value.trim());
+}
+
 export function isHeading(node: RootContent): boolean {
   return node.type === 'heading';
 }

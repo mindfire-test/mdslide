@@ -1,26 +1,20 @@
 import { RootContent } from 'mdast';
-import { isHeading } from '../parser/lexer.js';
-import { toString } from 'mdast-util-to-string';
+import type { SlideNode } from '@mindfiredigital/mdslide-shared';
+import { calculateNodeHeight } from './nodeHeight.js';
+import { MAX_CONTENT_HEIGHT, MAX_SLIDE_SCORE } from '../constants/index.js';
+
+// Converts the overflow engine's pixel-height estimate into this file's
+// abstract "slide capacity" unit, so flat-document chunking here and
+// mid-slide auto-splitting in overflow/index.ts agree on how much content
+// fits instead of running two independently-tuned heuristics.
+const PIXELS_PER_SCORE_UNIT = MAX_CONTENT_HEIGHT / MAX_SLIDE_SCORE;
 
 function getNodeWeight(node: RootContent): number {
-  if (isHeading(node)) return 2;
-
-  switch (node.type) {
-    case 'paragraph':
-      return Math.max(1, Math.ceil(toString(node).split(/\s+/).length / 20));
-
-    case 'list':
-      return node.children?.length ?? 0;
-
-    case 'table':
-      return 4;
-
-    case 'code':
-      return Math.max(1, Math.ceil((node.value || '').split('\n').length / 5));
-
-    default:
-      return 1;
-  }
+  // mdast's RootContent and the normalized SlideNode share the same shape
+  // for the fields calculateNodeHeight reads (type/value/children/depth),
+  // so it can score raw parser output before normalization runs.
+  const heightPx = calculateNodeHeight(node as unknown as SlideNode);
+  return Math.max(1, Math.ceil(heightPx / PIXELS_PER_SCORE_UNIT));
 }
 
 export { getNodeWeight };

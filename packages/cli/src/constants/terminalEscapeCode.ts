@@ -1,22 +1,34 @@
 import { LogLevel } from '../types/index.js';
 
+function detectColorSupport(): boolean {
+  const env = process.env;
+  if (env['FORCE_COLOR'] !== undefined && env['FORCE_COLOR'] !== '0') return true;
+  if (env['NO_COLOR'] !== undefined && env['NO_COLOR'] !== '') return false;
+  if (env['TERM'] === 'dumb') return false;
+  return Boolean(process.stdout.isTTY);
+}
+
+export const COLORS_ENABLED = detectColorSupport();
+
+const code = (escape: string): string => (COLORS_ENABLED ? escape : '');
+
 // Text Styling
 export const STYLES = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
+  reset: code('\x1b[0m'),
+  bold: code('\x1b[1m'),
+  dim: code('\x1b[2m'),
 };
 
 // Standard Foreground Colors
 export const COLORS = {
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  magenta: '\x1b[35m',
-  blue: '\x1b[34m',
-  red: '\x1b[31m',
-  grey: '\x1b[90m',
-  white: '\x1b[37m',
+  cyan: code('\x1b[36m'),
+  green: code('\x1b[32m'),
+  yellow: code('\x1b[33m'),
+  magenta: code('\x1b[35m'),
+  blue: code('\x1b[34m'),
+  red: code('\x1b[31m'),
+  grey: code('\x1b[90m'),
+  white: code('\x1b[37m'),
 };
 
 export const ERASE = {

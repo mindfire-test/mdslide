@@ -2,12 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import { Logger } from '../logger/index.js';
 import { Spinner } from '../ui/spinner.js';
-import { InputNotFoundError, InvalidFormatError, CompileError } from '../middleware/errors.js';
+import {
+  InvalidFormatError,
+  CompileError,
+  StdoutOutputError,
+  reportCommandError,
+} from '../middleware/errors.js';
 import type { CompileOptions, OutputFormat } from '../types/index.js';
 import { RELOAD_SCRIPT } from '../script/reloadScript.js';
 import { COMPILE_CONFIG, COMPILE_MESSAGES } from '../constants/index.js';
 import { compileToPdf } from '../exports/pdfExports.js';
 import { compileToScreenshotPptx, compileToEditablePptx } from '../exports/pptxExports.js';
+import { isStdio, readInputSource } from '../utils/index.js';
 import type { Compiler as CompilerType, CompileResult } from '@mindfiredigital/mdslide-core';
 import type { Slide } from '@mindfiredigital/mdslide-shared';
 
@@ -42,11 +48,7 @@ export async function runCompile(
   slides: Slide[];
   meta: Record<string, unknown>;
 }> {
-  try {
-    await fs.promises.access(inputFile);
-  } catch {
-    throw new InputNotFoundError(inputFile);
-  }
+  const markdown = await readInputSource(inputFile);
 
   let compilerInstance: CompilerType;
   try {
@@ -56,11 +58,10 @@ export async function runCompile(
     throw new CompileError(COMPILE_MESSAGES.CORE_NOT_FOUND, {});
   }
 
-  const markdown = await fs.promises.readFile(inputFile, 'utf8');
   let result: CompileResult;
 
   try {
-    result = compilerInstance.compile(markdown, { theme: opts.theme });
+    result = compilerInstance.compile(markdown, { theme: opts.theme, assetUrls: opts.assetUrls });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     throw new CompileError(message, { file: inputFile });
@@ -74,22 +75,55 @@ export async function runCompile(
   const slides = result.slides ?? [];
   const meta = result.meta ?? {};
   const slideCount = result.slides?.length ?? 0;
-  const warnings = (result as any).warnings ?? [];
+  const warnings = result.warnings ?? [];
 
   return { html, meta, slides, slideCount, warnings };
 }
 
 // Compiler the commands
 export async function compileCommand(inputFile: string, opts: CompileOptions): Promise<void> {
-  const log = new Logger(opts.logLevel ?? 'info');
+  const isStdin = isStdio(inputFile);
+  const isStdoutOutput = isStdio(opts.output);
+
+  // --json and a stdout-piped output both want to own stdout; refuse the
+  // combo up front instead of interleaving a JSON envelope with raw HTML.
+  if (opts.json && isStdoutOutput) {
+    const err = new StdoutOutputError(
+      'Cannot combine --json with --output - (both write to stdout).'
+    );
+    new Logger('info').error(err);
+    throw err;
+  }
+
+  // --json keeps stdout parseable: human logs are silenced, errors are
+  // emitted as a JSON object instead. Streaming the compiled file to stdout
+  // needs the same silence, so decorated logs don't corrupt the piped output.
+  const log = new Logger(opts.json || isStdoutOutput ? 'silent' : (opts.logLevel ?? 'info'));
   const spinner = new Spinner(log);
+  const absInput = isStdin ? '<stdin>' : path.resolve(inputFile);
 
-  const format = detectFormat(opts.output, opts.format);
+  let format: OutputFormat;
+  try {
+    format = detectFormat(opts.output, opts.format);
+  } catch (err) {
+    reportCommandError(err, opts, absInput, log);
+    throw err;
+  }
+
+  if (isStdoutOutput && format !== 'html') {
+    const err = new StdoutOutputError(
+      `Cannot stream "${format}" output to stdout - only html supports it.`
+    );
+    reportCommandError(err, opts, absInput, log);
+    throw err;
+  }
+
   const outputFile = opts.output ?? `output.${format}`;
-  const absInput = path.resolve(inputFile);
-  const absOutput = path.resolve(outputFile);
+  const absOutput = isStdoutOutput ? '<stdout>' : path.resolve(outputFile);
 
-  spinner.start(COMPILE_MESSAGES.SPINNER_START(path.basename(absInput), format));
+  spinner.start(
+    COMPILE_MESSAGES.SPINNER_START(isStdin ? '<stdin>' : path.basename(absInput), format)
+  );
 
   let html: string;
   let slideCount: number;
@@ -97,19 +131,25 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
   let deck: { slides: Slide[]; meta: Record<string, unknown> };
 
   try {
-    const compileResult = await runCompile(absInput, opts, log);
+    const compileResult = await runCompile(isStdin ? inputFile : absInput, opts, log);
     html = compileResult.html;
     slideCount = compileResult.slideCount;
     warnings = compileResult.warnings;
     deck = { slides: compileResult.slides, meta: compileResult.meta };
   } catch (err) {
     spinner.fail();
-    log.error(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
+  const baseDir = isStdin ? process.cwd() : path.dirname(absInput);
+
   try {
-    if (format === 'html') {
+    if (opts.dryRun) {
+      // Full compile ran (so errors/warnings are real); skip every side effect.
+    } else if (isStdoutOutput) {
+      process.stdout.write(html);
+    } else if (format === 'html') {
       await fs.promises.mkdir(path.dirname(absOutput), { recursive: true });
       await fs.promises.writeFile(absOutput, html);
     } else if (format === 'pdf') {
@@ -117,7 +157,7 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
       await compileToPdf(html, absOutput, {
         chromePath: process.env['CHROME_PATH'],
         timeoutMs: opts.pdfTimeoutMs ?? 30_000,
-        baseDir: path.dirname(path.resolve(inputFile)),
+        baseDir,
       });
     } else if (format === 'pptx') {
       const pptxMode = opts.pptxMode ?? 'screenshot';
@@ -126,34 +166,76 @@ export async function compileCommand(inputFile: string, opts: CompileOptions): P
       if (pptxMode === 'editable') {
         await compileToEditablePptx(deck, absOutput, {
           theme: opts.theme,
-          baseDir: path.dirname(path.resolve(inputFile)),
+          baseDir,
         });
       } else {
         await compileToScreenshotPptx(html, slideCount, absOutput, {
           theme: opts.theme,
-          baseDir: path.dirname(path.resolve(inputFile)),
+          baseDir,
         });
       }
     }
   } catch (err) {
     spinner.fail();
-    log.error(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
+  const relOutput = isStdoutOutput ? '<stdout>' : path.relative(process.cwd(), absOutput);
   spinner.succeed(
-    COMPILE_MESSAGES.SUCCESS_SUMMARY(
-      path.relative(process.cwd(), absOutput),
-      slideCount,
-      warnings.length
-    )
+    opts.dryRun
+      ? COMPILE_MESSAGES.DRY_RUN_SUMMARY(relOutput, slideCount, warnings.length)
+      : COMPILE_MESSAGES.SUCCESS_SUMMARY(relOutput, slideCount, warnings.length)
   );
 
   if (warnings.length) {
-    for (const w of warnings) log.warn(w);
+    if (isStdoutOutput) {
+      for (const w of warnings) process.stderr.write(`${w}\n`);
+    } else {
+      for (const w of warnings) log.warn(w);
+    }
   }
 
-  if (opts.open) {
+  const strictFailed = Boolean(opts.strict) && warnings.length > 0;
+
+  if (opts.json) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          file: absInput,
+          output: absOutput,
+          format,
+          slides: slideCount,
+          warnings,
+          dryRun: Boolean(opts.dryRun),
+          written: !opts.dryRun,
+          success: !strictFailed,
+          ...(strictFailed
+            ? {
+                error: `Compiled with ${warnings.length} warning${warnings.length !== 1 ? 's' : ''} (--strict).`,
+              }
+            : {}),
+        },
+        null,
+        2
+      )}\n`
+    );
+  }
+
+  if (strictFailed) {
+    const err = new CompileError(
+      `Compiled with ${warnings.length} warning${warnings.length !== 1 ? 's' : ''} (--strict).`,
+      { file: inputFile }
+    );
+    if (isStdoutOutput) {
+      process.stderr.write(`${err.message}\n`);
+    } else if (!opts.json) {
+      log.error(err);
+    }
+    throw err;
+  }
+
+  if (opts.open && !opts.dryRun && !isStdoutOutput) {
     const { default: open } = await import('open').catch(() => ({ default: null }));
     if (open) open(absOutput).catch(() => {});
   }

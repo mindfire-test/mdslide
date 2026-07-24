@@ -12,6 +12,10 @@ export function createSlideNode(partial: Partial<SlideNode> & { type: string }):
     alt: partial.alt,
     header: partial.header,
     depth: partial.depth,
+    ratio: partial.ratio,
+    layout: partial.layout,
+    admonition: partial.admonition,
+    chart: partial.chart,
   };
 }
 
@@ -30,5 +34,10 @@ export function createSlide(partial: Partial<Slide>): Slide {
     overflow: partial.overflow,
     animation: partial.animation,
     fontSize: partial.fontSize,
+    align: partial.align,
+    columnsConfig: partial.columnsConfig,
+    imageFit: partial.imageFit,
+    imagePosition: partial.imagePosition,
+    accentColor: partial.accentColor,
   };
 }

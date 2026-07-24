@@ -6,10 +6,15 @@ import chokidar from 'chokidar';
 import { Logger } from '../logger/index.js';
 import { Spinner } from '../ui/spinner.js';
 import { onShutdown } from '../middleware/signals.js';
-import { InputNotFoundError, PortInUseError } from '../middleware/errors.js';
+import {
+  InputNotFoundError,
+  PortInUseError,
+  reportCommandError,
+  StdinUnsupportedError,
+} from '../middleware/errors.js';
 import { runCompile } from './compile.js';
 import type { WatchOptions } from '../types/index.js';
-import { link, createStaticServer } from '../utils/index.js';
+import { link, createStaticServer, isStdio } from '../utils/index.js';
 import { WATCH_CONFIG, WATCH_MESSAGES, ERROR_OVERLAY_TEMPLATE } from '../constants/index.js';
 
 function buildErrorHtml(err: unknown): string {
@@ -36,23 +41,23 @@ async function findPort(preferred: number): Promise<number> {
 }
 
 export async function watchCommand(inputFile: string, opts: WatchOptions): Promise<void> {
-  const log = new Logger(opts.logLevel ?? 'info');
+  const log = new Logger(opts.json ? 'silent' : (opts.logLevel ?? 'info'));
   const absInput = path.resolve(inputFile);
+
+  if (isStdio(inputFile)) {
+    const err = new StdinUnsupportedError(
+      'watch does not support stdin input: there is nothing on disk to watch for changes.',
+      'Save the deck to a file and pass its path, e.g. mdslide watch slides.md'
+    );
+    reportCommandError(err, opts, absInput, log);
+    throw err;
+  }
 
   try {
     await fs.promises.access(absInput);
   } catch {
     const err = new InputNotFoundError(absInput);
-    log.error(err);
-    throw err;
-  }
-
-  const preferredPort = opts.port ?? WATCH_CONFIG.PORT;
-  let port: number;
-  try {
-    port = await findPort(preferredPort);
-  } catch (err) {
-    log.error(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -62,13 +67,40 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
   const spinner = new Spinner(log);
   spinner.start(WATCH_MESSAGES.SPINNER_START(path.basename(absInput)));
 
+  let initialSlideCount = 0;
   try {
-    const { html } = await runCompile(absInput, opts, log, { injectReload: true });
+    const { html, slideCount } = await runCompile(absInput, opts, log, { injectReload: true });
     cachedHtml = html;
+    initialSlideCount = slideCount;
     spinner.succeed(WATCH_MESSAGES.SPINNER_READY);
   } catch (err) {
     spinner.fail(WATCH_MESSAGES.SPINNER_FAIL);
-    log.error(err);
+    reportCommandError(err, opts, absInput, log);
+    throw err;
+  }
+
+  // --dry-run: prove the deck compiles, but never start a server.
+  if (opts.dryRun) {
+    if (opts.json) {
+      process.stdout.write(
+        `${JSON.stringify(
+          { file: absInput, success: true, dryRun: true, slides: initialSlideCount },
+          null,
+          2
+        )}\n`
+      );
+    } else {
+      log.step('[dry-run] compile OK - server not started.');
+    }
+    return;
+  }
+
+  const preferredPort = opts.port ?? WATCH_CONFIG.PORT;
+  let port: number;
+  try {
+    port = await findPort(preferredPort);
+  } catch (err) {
+    reportCommandError(err, opts, absInput, log);
     throw err;
   }
 
@@ -106,15 +138,24 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
     server.listen(port, '127.0.0.1', () => {
       server.off('error', reject);
       const url = `http://localhost:${port}`;
-      log.raw('');
-      log.raw(`  ${link(url)}`);
-      log.raw('');
-      log.step(WATCH_MESSAGES.WATCHING_FILE(path.relative(process.cwd(), absInput)));
-      log.raw('');
+      if (opts.json) {
+        // NDJSON: one compact JSON object per line so a supervising process
+        // can parse the stream incrementally. This is the first line; a
+        // {"event":"recompile",...} line follows every subsequent save.
+        process.stdout.write(
+          `${JSON.stringify({ success: true, url, port, watching: absInput })}\n`
+        );
+      } else {
+        log.raw('');
+        log.raw(`  ${link(url)}`);
+        log.raw('');
+        log.step(WATCH_MESSAGES.WATCHING_FILE(path.relative(process.cwd(), absInput)));
+        log.raw('');
+      }
       resolve();
     });
   }).catch((err) => {
-    log.error(err);
+    reportCommandError(err, opts, absInput, log);
     throw err;
   });
 
@@ -126,7 +167,7 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
     log.step(WATCH_MESSAGES.SERVER_STOPPED);
   });
 
-  if (opts.open) {
+  if (opts.open && !opts.dryRun) {
     const { default: open } = await import('open').catch(() => ({ default: null }));
     if (open) open(`http://localhost:${port}`).catch(() => {});
   }
@@ -148,11 +189,26 @@ export async function watchCommand(inputFile: string, opts: WatchOptions): Promi
       log.verbose(WATCH_MESSAGES.CHANGE_DETECTED);
 
       try {
-        const { html, slideCount } = await runCompile(absInput, opts, log, { injectReload: true });
+        const { html, slideCount, warnings } = await runCompile(absInput, opts, log, {
+          injectReload: true,
+        });
         cachedHtml = html;
-        log.success(WATCH_MESSAGES.RECOMPILE_SUCCESS(slideCount));
+        if (opts.json) {
+          process.stdout.write(
+            `${JSON.stringify({ event: 'recompile', success: true, slides: slideCount, warnings })}\n`
+          );
+        } else {
+          log.success(WATCH_MESSAGES.RECOMPILE_SUCCESS(slideCount));
+        }
       } catch (err) {
-        log.error(err);
+        if (opts.json) {
+          const e = err instanceof Error ? err : new Error(String(err));
+          process.stdout.write(
+            `${JSON.stringify({ event: 'recompile', success: false, error: e.message, code: (e as any).code })}\n`
+          );
+        } else {
+          log.error(err);
+        }
         cachedHtml = buildErrorHtml(err);
       }
 

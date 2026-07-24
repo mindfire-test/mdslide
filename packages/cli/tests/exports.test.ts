@@ -7,8 +7,26 @@ import { spawn, execFileSync, execFile } from 'child_process';
 import { EventEmitter } from 'events';
 import { findChromeBinary, exportToPdf, compileToPdf } from '../src/exports/pdfExports.ts';
 import { compileToScreenshotPptx } from '../src/exports/pptxScreenshotExporter.ts';
+import { compileToScreenshots } from '../src/exports/screenshotExporter.ts';
 import { compileToEditablePptx } from '../src/exports/pptxEditableExporter.ts';
 import * as helper from '../src/exports/helper/pptxEditableSlideHelper.ts';
+import JSZip from 'jszip';
+
+// Reads slide1.xml out of a compiled .pptx (a zip archive) for assertions
+// that need to see the actual generated shapes/media - not just that the
+// file was written successfully.
+async function readPptxSlideXml(pptxPath: string, slideNo = 1): Promise<string> {
+  const zip = await JSZip.loadAsync(await fs.promises.readFile(pptxPath));
+  const entry = zip.file(`ppt/slides/slide${slideNo}.xml`);
+  if (!entry) throw new Error(`slide${slideNo}.xml not found in ${pptxPath}`);
+  return entry.async('string');
+}
+
+async function readPptxNotesXml(pptxPath: string, slideNo = 1): Promise<string | null> {
+  const zip = await JSZip.loadAsync(await fs.promises.readFile(pptxPath));
+  const entry = zip.file(`ppt/notesSlides/notesSlide${slideNo}.xml`);
+  return entry ? entry.async('string') : null;
+}
 
 // Mock child_process
 vi.mock('child_process', async () => {
@@ -18,6 +36,26 @@ vi.mock('child_process', async () => {
     spawn: vi.fn(),
     execFileSync: vi.fn(),
     execFile: vi.fn(),
+  };
+});
+
+// Mock the Chrome-based rasterizer (Mermaid/math/gradient-background PNGs) so
+// these tests never need a real Chrome binary - same spirit as the
+// child_process mock above, just scoped to mdslide's own rasterize module.
+vi.mock('../src/exports/helper/rasterize.ts', async () => {
+  const actual = await vi.importActual<typeof import('../src/exports/helper/rasterize.ts')>(
+    '../src/exports/helper/rasterize.ts'
+  );
+  const fakeRaster = async () => ({
+    buffer: Buffer.from('fake-png-bytes'),
+    width: 400,
+    height: 300,
+  });
+  return {
+    ...actual,
+    renderMermaidToPng: vi.fn(fakeRaster),
+    renderMathToPng: vi.fn(fakeRaster),
+    renderBackgroundToPng: vi.fn(fakeRaster),
   };
 });
 
@@ -59,6 +97,8 @@ describe('CLI Exporter Modules', () => {
 
     // Write a dummy PNG file so pptxgenjs does not fail on local image read
     fs.writeFileSync(path.join(tmpDir, 'nonexistent.png'), 'fake png data');
+    // Write a dummy MP4 file so pptxgenjs's addMedia does not fail on local video read
+    fs.writeFileSync(path.join(tmpDir, 'demo.mp4'), 'fake mp4 data');
 
     // Write dummy static assets to test local server content-type headers
     fs.writeFileSync(path.join(tmpDir, 'test.css'), 'body { color: red; }');
@@ -258,6 +298,71 @@ describe('CLI Exporter Modules', () => {
     });
   });
 
+  describe('Screenshot Exporter (screenshotExporter.ts)', () => {
+    test('compileToScreenshots throws if no chrome is found', async () => {
+      mockExecFileSyncSuccess = false;
+      await expect(
+        compileToScreenshots('<html></html>', 2, path.join(tmpDir, 'shots'), {
+          chromePath: null as any,
+        })
+      ).rejects.toThrow('Screenshot export requires Google Chrome or Chromium');
+    });
+
+    test('compileToScreenshots captures one PNG per slide by default', async () => {
+      const outDir = path.join(tmpDir, 'shots-all');
+      const paths = await compileToScreenshots(
+        '<html><head></head><body></body></html>',
+        3,
+        outDir,
+        { chromePath: 'mock-chrome', baseDir: tmpDir }
+      );
+
+      expect(paths).toHaveLength(3);
+      expect(paths).toEqual([
+        path.join(outDir, 'slide-1.png'),
+        path.join(outDir, 'slide-2.png'),
+        path.join(outDir, 'slide-3.png'),
+      ]);
+      for (const p of paths) expect(fs.existsSync(p)).toBe(true);
+    });
+
+    test('compileToScreenshots captures only the requested slide', async () => {
+      const outDir = path.join(tmpDir, 'shots-one');
+      const paths = await compileToScreenshots(
+        '<html><head></head><body></body></html>',
+        3,
+        outDir,
+        { chromePath: 'mock-chrome', baseDir: tmpDir, slide: 2 }
+      );
+
+      expect(paths).toEqual([path.join(outDir, 'slide-2.png')]);
+      expect(fs.existsSync(paths[0]!)).toBe(true);
+    });
+
+    test('compileToScreenshots propagates chrome timeouts', async () => {
+      spawnMode = 'timeout';
+      const outDir = path.join(tmpDir, 'shots-timeout');
+      await expect(
+        compileToScreenshots('<html><head></head><body></body></html>', 1, outDir, {
+          chromePath: 'mock-chrome',
+          timeoutMs: 10,
+          baseDir: tmpDir,
+        })
+      ).rejects.toThrow('Screenshot timed out for:');
+    });
+
+    test('compileToScreenshots propagates chrome exit errors', async () => {
+      spawnMode = 'error-exit';
+      const outDir = path.join(tmpDir, 'shots-err');
+      await expect(
+        compileToScreenshots('<html><head></head><body></body></html>', 1, outDir, {
+          chromePath: 'mock-chrome',
+          baseDir: tmpDir,
+        })
+      ).rejects.toThrow('Chrome screenshot failed');
+    });
+  });
+
   describe('Editable PPTX Exporter (pptxEditableExporter.ts)', () => {
     test('compileToEditablePptx compiles all slide types and themes successfully', async () => {
       const outPptx = path.join(tmpDir, 'editable.pptx');
@@ -443,6 +548,358 @@ describe('CLI Exporter Modules', () => {
       });
 
       expect(fs.existsSync(outPptx)).toBe(true);
+    });
+
+    test('renders an auto-detected split slide (image + text, no ::col:: columns) with both the picture and the text - regression test for a previously silent-drop bug', async () => {
+      const outPptx = path.join(tmpDir, 'auto-split.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'split',
+            title: 'Auto Split',
+            content: [
+              {
+                type: 'paragraph',
+                children: [{ type: 'text', value: 'Some explanatory text.' }],
+              },
+              { type: 'image', url: './nonexistent.png' },
+            ],
+          },
+        ],
+      };
+
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('<p:pic>');
+      expect(xml).toContain('Some explanatory text.');
+    });
+
+    test('honors imagePosition: left on an auto-detected split slide by placing the picture in the left bound box', async () => {
+      const outPptx = path.join(tmpDir, 'auto-split-left.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'split',
+            imagePosition: 'left',
+            content: [
+              { type: 'paragraph', children: [{ type: 'text', value: 'Explanatory text.' }] },
+              { type: 'image', url: './nonexistent.png' },
+            ],
+          },
+        ],
+      };
+
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      // The <p:pic> shape's <a:off x="..."> should reflect the left bound box
+      // (x: 0.8in = 731520 EMU), not the right one (x: 5.0in = 4572000 EMU).
+      const picOffsetMatch = xml.match(/<p:pic>[\s\S]*?<a:off x="(\d+)"/);
+      expect(picOffsetMatch).not.toBeNull();
+      expect(Number(picOffsetMatch![1])).toBeLessThan(2000000);
+    });
+
+    test('embeds a .mp4 image-syntax URL as a native pptx media object instead of a picture', async () => {
+      const outPptx = path.join(tmpDir, 'video-slide.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'visual',
+            title: 'Demo Video',
+            content: [{ type: 'image', url: './demo.mp4' }],
+          },
+        ],
+      };
+
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('<p:pic>');
+      expect(xml).toMatch(/videoFile|<a:videoFile/);
+    });
+
+    test('applies a per-slide accentColor override to that slide only', async () => {
+      const outPptx = path.join(tmpDir, 'accent-color.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'title',
+            title: 'Popping Slide',
+            accentColor: '#00ff00',
+            content: [],
+          },
+          {
+            type: 'title',
+            title: 'Normal Slide',
+            content: [],
+          },
+        ],
+      };
+
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const poppingXml = await readPptxSlideXml(outPptx, 1);
+      const normalXml = await readPptxSlideXml(outPptx, 2);
+      expect(poppingXml).toContain('00FF00');
+      expect(normalXml).not.toContain('00FF00');
+    });
+
+    test('scales text size up with a larger <!-- fontSize --> value', async () => {
+      const mkDeck = (fontSize?: string) => ({
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Sizing',
+            fontSize,
+            content: [
+              { type: 'paragraph', children: [{ type: 'text', value: 'Some body text.' }] },
+            ],
+          },
+        ],
+      });
+
+      const smallOut = path.join(tmpDir, 'fontsize-xs.pptx');
+      const largeOut = path.join(tmpDir, 'fontsize-xxl.pptx');
+      await compileToEditablePptx(mkDeck('xs') as any, smallOut, {
+        theme: 'light',
+        baseDir: tmpDir,
+      });
+      await compileToEditablePptx(mkDeck('xxl') as any, largeOut, {
+        theme: 'light',
+        baseDir: tmpDir,
+      });
+
+      const smallXml = await readPptxSlideXml(smallOut);
+      const largeXml = await readPptxSlideXml(largeOut);
+      const smallSize = Number(smallXml.match(/sz="(\d+)"/)?.[1]);
+      const largeSize = Number(largeXml.match(/sz="(\d+)"/)?.[1]);
+      expect(largeSize).toBeGreaterThan(smallSize);
+    });
+
+    test('honors titleAlign on the slide title', async () => {
+      const outPptx = path.join(tmpDir, 'title-align.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Right-aligned title',
+            titleAlign: 'right',
+            content: [{ type: 'paragraph', children: [{ type: 'text', value: 'Body.' }] }],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('algn="r"');
+    });
+
+    test('renders a real N-column split honoring the ratio hint on each column', async () => {
+      const outPptx = path.join(tmpDir, 'ratio-columns.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'split',
+            content: [
+              {
+                type: 'column',
+                ratio: 2,
+                children: [
+                  { type: 'paragraph', children: [{ type: 'text', value: 'Wide column' }] },
+                ],
+              },
+              {
+                type: 'column',
+                ratio: 1,
+                children: [
+                  { type: 'paragraph', children: [{ type: 'text', value: 'Narrow one' }] },
+                ],
+              },
+              {
+                type: 'column',
+                ratio: 1,
+                children: [
+                  { type: 'paragraph', children: [{ type: 'text', value: 'Narrow two' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('Wide column');
+      expect(xml).toContain('Narrow one');
+      expect(xml).toContain('Narrow two');
+      // Anchored on `<p:spPr><a:xfrm>` so the group shape's own zero-sized
+      // `<a:ext cx="0" cy="0"/>` (from `<p:grpSpPr><a:xfrm>`) isn't matched.
+      const widths = [
+        ...xml.matchAll(/<p:spPr><a:xfrm><a:off x="\d+" y="\d+"\/><a:ext cx="(\d+)" cy="\d+"\/>/g),
+      ].map((m) => Number(m[1]));
+      expect(widths.length).toBeGreaterThanOrEqual(3);
+      // The first (ratio:2) column should be roughly twice as wide as either
+      // of the two ratio:1 columns that follow it.
+      expect(widths[0]! / widths[1]!).toBeGreaterThan(1.5);
+    });
+
+    test('renders a heading node found in the middle of ordinary body content, distinct from plain paragraph text', async () => {
+      const outPptx = path.join(tmpDir, 'body-heading.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Slide Title',
+            content: [
+              { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Body Heading' }] },
+              { type: 'paragraph', children: [{ type: 'text', value: 'Regular paragraph text.' }] },
+            ],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('Body Heading');
+      expect(xml).toContain('Regular paragraph text.');
+      // The heading run should be bold; the plain paragraph run should not be.
+      // (Find each run's own immediately-preceding <a:rPr> tag rather than a
+      // lazy regex spanning the whole document, which would happily match
+      // across unrelated runs - e.g. the bold slide title earlier in the XML.)
+      const rPrTagBefore = (needle: string) => {
+        const textIdx = xml.indexOf(needle);
+        const rPrIdx = xml.lastIndexOf('<a:rPr', textIdx);
+        return xml.slice(rPrIdx, xml.indexOf('>', rPrIdx) + 1);
+      };
+      expect(rPrTagBefore('Body Heading')).toContain('b="1"');
+      expect(rPrTagBefore('Regular paragraph text.')).not.toContain('b="1"');
+    });
+
+    test('renders an admonition mixed into a content slide as an accent bar, not a full bordered card', async () => {
+      const outPptx = path.join(tmpDir, 'inline-admonition.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Mixed Slide',
+            content: [
+              { type: 'paragraph', children: [{ type: 'text', value: 'Intro paragraph.' }] },
+              {
+                type: 'blockquote',
+                admonition: 'warning',
+                children: [
+                  { type: 'paragraph', children: [{ type: 'text', value: 'Be careful here.' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('Be careful here.');
+      expect(xml).toContain('Warning');
+      // D29922 = ADMONITION_COLORS.warning, used for the accent bar's fill.
+      expect(xml).toContain('D29922');
+    });
+
+    test('adds an ordered list as real pptx auto-numbering, not bullet characters', async () => {
+      const outPptx = path.join(tmpDir, 'ordered-list.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            content: [
+              {
+                type: 'list',
+                ordered: true,
+                children: [
+                  { type: 'listItem', children: [{ type: 'text', value: 'First' }] },
+                  { type: 'listItem', children: [{ type: 'text', value: 'Second' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('buAutoNum');
+      expect(xml).not.toContain('buChar');
+    });
+
+    test('writes slide.notes into the pptx Notes pane', async () => {
+      const outPptx = path.join(tmpDir, 'notes.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Has Notes',
+            notes: 'Remember to mention the roadmap here.',
+            content: [{ type: 'paragraph', children: [{ type: 'text', value: 'Body.' }] }],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const notesXml = await readPptxNotesXml(outPptx, 1);
+      expect(notesXml).not.toBeNull();
+      expect(notesXml).toContain('Remember to mention the roadmap here.');
+    });
+
+    test('renders a mermaid code block as an embedded picture instead of raw diagram text', async () => {
+      const outPptx = path.join(tmpDir, 'mermaid.pptx');
+      const mockDeck = {
+        meta: { theme: 'dark' },
+        slides: [
+          {
+            type: 'code',
+            content: [{ type: 'code', lang: 'mermaid', value: 'graph TD\n  A --> B' }],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'dark', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('<p:pic>');
+      expect(xml).not.toContain('graph TD');
+    });
+
+    test('renders a display math node as an embedded picture instead of dropping it', async () => {
+      const outPptx = path.join(tmpDir, 'math.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            content: [{ type: 'math', value: 'f(x) = x^2' }],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('<p:pic>');
+    });
+
+    test('uses the real HTML theme font family, not the old drifted substitute', async () => {
+      const outPptx = path.join(tmpDir, 'theme-font.pptx');
+      const mockDeck = {
+        meta: { theme: 'light' },
+        slides: [
+          {
+            type: 'content',
+            title: 'Font Check',
+            content: [{ type: 'paragraph', children: [{ type: 'text', value: 'Body.' }] }],
+          },
+        ],
+      };
+      await compileToEditablePptx(mockDeck as any, outPptx, { theme: 'light', baseDir: tmpDir });
+      const xml = await readPptxSlideXml(outPptx);
+      expect(xml).toContain('typeface="Inter"');
+      expect(xml).not.toContain('Trebuchet MS');
     });
   });
 

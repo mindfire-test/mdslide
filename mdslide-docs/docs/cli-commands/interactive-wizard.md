@@ -69,3 +69,30 @@ When you launch the wizard, you will be guided through the following prompt opti
    - `Compile only` (Build static presentation files immediately)
    - `Watch and preview` (Launch live hot-reloading dev server)
 5. **Auto-Open Web Browser**: Decide if the browser should open automatically after compiling or starting watch mode.
+
+---
+
+## Bypassing or Automating the Wizard
+
+Two [global flags](./global-flags.md) change how the wizard is triggered, for CI pipelines and AI agents that can't answer interactive prompts:
+
+- **`--no-input`** always bypasses the wizard, even when no other flags are passed and even if `-i`/`--interactive` is explicitly given. Previously the wizard triggered by default whenever no flags were present; `--no-input` now short-circuits that check unconditionally, so the command runs in manual mode using only its defaults and any explicit flags.
+- **`--yes`** runs the wizard "hands-free": instead of prompting, it auto-accepts every question with its default answer and prints a short summary of what was chosen.
+
+In auto mode (triggered by either `--yes` or `--no-input`), the effective defaults used are:
+
+| Prompt            | Auto default                                                                     |
+| :---------------- | :------------------------------------------------------------------------------- |
+| Output format     | `html`                                                                           |
+| Theme             | `light`                                                                          |
+| Output file       | `output.html`                                                                    |
+| Watch server      | Not started                                                                      |
+| Auto-open browser | Never opens (opening a browser is never a safe default in a non-interactive run) |
+
+```bash
+# CI/agent-friendly: never prompts, no wizard
+mdslide slides.md --no-input --json
+
+# Hands-free wizard: same defaults, but goes through the wizard's summary output
+mdslide slides.md --yes
+```

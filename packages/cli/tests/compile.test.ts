@@ -2,10 +2,20 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import { runCompile, compileCommand } from '../src/commands/compile.ts';
 import { Logger } from '../src/logger/index.ts';
 import { Compiler } from '@mindfiredigital/mdslide-core';
 import process from 'process';
+
+// Temporarily replaces process.stdin with a readable stream yielding `content`,
+// returning a restore function so tests don't leak the fake stream.
+function mockStdin(content: string): () => void {
+  const original = process.stdin;
+  const stream = Readable.from([Buffer.from(content, 'utf8')]);
+  Object.defineProperty(process, 'stdin', { value: stream, configurable: true });
+  return () => Object.defineProperty(process, 'stdin', { value: original, configurable: true });
+}
 
 // Mock exporter modules to avoid spawning chrome
 vi.mock('../src/exports/pdfExports.js', () => ({
@@ -204,5 +214,51 @@ describe('CLI Compile Command', () => {
         logLevel: 'silent',
       })
     ).rejects.toThrow('PDF export failed');
+  });
+
+  describe('stdin/stdout piping', () => {
+    test('runCompile reads Markdown from stdin when input is "-"', async () => {
+      const restore = mockStdin('# From Stdin\nHello\n');
+      try {
+        const log = new Logger('silent');
+        const result = await runCompile('-', { theme: 'light' }, log);
+        expect(result.html).toContain('From Stdin');
+        expect(result.slideCount).toBe(1);
+      } finally {
+        restore();
+      }
+    });
+
+    test('compileCommand compiles stdin input to a real output file', async () => {
+      const restore = mockStdin('# Stdin To File\n');
+      try {
+        await compileCommand('-', { output: outputHtml, format: 'html', logLevel: 'silent' });
+        expect(fs.existsSync(outputHtml)).toBe(true);
+        expect(fs.readFileSync(outputHtml, 'utf8')).toContain('Stdin To File');
+      } finally {
+        restore();
+      }
+    });
+
+    test('compileCommand streams html to stdout when --output is "-"', async () => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      await compileCommand(sampleMd, { output: '-', format: 'html', logLevel: 'silent' });
+
+      const written = writeSpy.mock.calls.map((c: any) => c[0]).join('');
+      expect(written).toContain('<!DOCTYPE html>');
+      expect(fs.existsSync(path.join(tmpDir, '-'))).toBe(false);
+    });
+
+    test('compileCommand rejects non-html format when --output is "-"', async () => {
+      await expect(
+        compileCommand(sampleMd, { output: '-', format: 'pdf', logLevel: 'silent' })
+      ).rejects.toThrow(/only html/);
+    });
+
+    test('compileCommand rejects combining --json with --output "-"', async () => {
+      await expect(
+        compileCommand(sampleMd, { output: '-', format: 'html', json: true })
+      ).rejects.toThrow(/stdout/);
+    });
   });
 });

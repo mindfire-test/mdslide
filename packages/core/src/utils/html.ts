@@ -39,3 +39,7 @@ export function sanitizeUrl(url: string, isImage = false): string {
   // Relative paths, anchors (#), query parameters, etc. are safe
   return sanitizeHtml(trimmed);
 }
+
+export function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm)(\?.*)?$/i.test(url.trim());
+}

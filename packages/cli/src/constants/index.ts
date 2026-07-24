@@ -7,3 +7,4 @@ export * from './logs/validationCommandLogs.js';
 export * from './logs/watchCommandLogs.js';
 export * from './logs/compileComandLogs.js';
 export * from './exports/pdfConstants.js';
+export * from './pptxBlockLayout.js';

@@ -23,7 +23,25 @@ Built with developer-first experience in mind, it allows you to focus purely on 
 
 ## Installation
 
-Install `mdslide` globally using your preferred package manager:
+### Standalone Binary (Recommended)
+
+You can install `mdslide` as a standalone binary without needing Node.js or Bun installed:
+
+**macOS & Linux (Shell Script):**
+
+```bash
+curl -fsSL https://mindfiredigital.github.io/mdslide/installer | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://mindfiredigital.github.io/mdslide/installer.ps1 | iex
+```
+
+### Package Managers
+
+Alternatively, install `mdslide` globally using your preferred package manager:
 
 ```bash
 # Using Bun (Recommended)

@@ -1,18 +1,47 @@
 import { RootContent } from 'mdast';
-import { VALID_ANIMATIONS, VALID_FONT_SIZES, VALID_SLIDE_TYPES } from '../constants/index.js';
+import {
+  VALID_ANIMATIONS,
+  VALID_FONT_SIZES,
+  VALID_SLIDE_TYPES,
+  VALID_CHART_TYPES,
+  VALID_IMAGE_FITS,
+  VALID_IMAGE_POSITIONS,
+} from '../constants/index.js';
 import { SlideNode, SlideType } from '@mindfiredigital/mdslide-shared';
+import { emitWarning } from '../utils/warnings.js';
 
-// Detects manual layout override comments e.g., <!-- layout: dark --> and clear out
-export function parseLayoutOveride(nodes: RootContent[]): {
+// Checks if a node is a column boundary marker (a paragraph containing only '::split::' or '::col::').
+function isColumnBoundaryMarker(node: {
+  type: string;
+  children?: { type: string; value?: string }[];
+}): boolean {
+  if (node.type !== 'paragraph' || !node.children || node.children.length !== 1) {
+    return false;
+  }
+  const child = node.children[0]!;
+  const text = child.value?.trim();
+  return child.type === 'text' && (text === '::split::' || text === '::col::');
+}
+
+// Removes layout override comments (e.g., <!-- layout: dark -->).
+// For split/multi-column slides, this function does nothing.
+// This allows each separate column to read its own layout later.
+export function parseLayoutOveride<T extends { type: string; value?: string; children?: any[] }>(
+  nodes: T[]
+): {
   layoutOverride: string | undefined;
-  filteredNodes: RootContent[];
+  filteredNodes: T[];
 } {
+  if (nodes.some((node) => isColumnBoundaryMarker(node))) {
+    return { layoutOverride: undefined, filteredNodes: nodes };
+  }
+
   let layoutOverride: string | undefined;
-  const filteredNodes: RootContent[] = [];
+  const filteredNodes: T[] = [];
 
   for (const node of nodes) {
     if (node.type == 'html') {
-      const val = node.value.trim();
+      const val = (node.value ?? '').trim();
       const layoutMatch = val.match(/^<!--\s*layout:\s*(\w+)\s*-->$/);
       if (layoutMatch) {
         layoutOverride = layoutMatch[1];
@@ -62,6 +91,20 @@ export function parseBackgroundImage(nodes: RootContent[]): {
   };
 }
 
+// Normalizes common top/center/bottom typos and aliases ("buttom" -> "bottom",
+// "middle" -> "center") shared by any annotation that positions content
+// vertically (titlePosition, align).
+export function normalizeVerticalPosition(raw: string): string {
+  const pos = raw.toLowerCase();
+  if (pos === 'buttom') {
+    return 'bottom';
+  }
+  if (pos === 'middle') {
+    return 'center';
+  }
+  return pos;
+}
+
 export function parseTitlePositioning(nodes: RootContent[]): {
   titleAlign: string | undefined;
   titlePosition: string | undefined;
@@ -81,14 +124,7 @@ export function parseTitlePositioning(nodes: RootContent[]): {
       }
       const positionMatch = val.match(/^<!--\s*titlePosition:\s*(\w+)\s*-->$/i);
       if (positionMatch) {
-        const pos = positionMatch[1].toLowerCase();
-        if (pos === 'buttom') {
-          titlePosition = 'bottom';
-        } else if (pos === 'middle') {
-          titlePosition = 'center';
-        } else {
-          titlePosition = pos;
-        }
+        titlePosition = normalizeVerticalPosition(positionMatch[1]);
         continue;
       }
     }
@@ -99,6 +135,188 @@ export function parseTitlePositioning(nodes: RootContent[]): {
     titlePosition,
     filteredNodes,
   };
+}
+
+// Controls content vertical alignment inside its own flex box. This is independent of title position.
+export function parseContentAlign(nodes: RootContent[]): {
+  align: string | undefined;
+  filteredNodes: RootContent[];
+} {
+  let align: string | undefined;
+  const filteredNodes: RootContent[] = [];
+
+  for (const node of nodes) {
+    if (node.type === 'html') {
+      const val = node.value.trim();
+      const alignMatch = val.match(/^<!--\s*align:\s*(\w+)\s*-->$/i);
+      if (alignMatch) {
+        align = normalizeVerticalPosition(alignMatch[1]);
+        continue;
+      }
+    }
+    filteredNodes.push(node);
+  }
+  return {
+    align,
+    filteredNodes,
+  };
+}
+
+// Finds imageFit and imagePosition layout comments for the slide.
+// Invalid values trigger a warning and fall back to defaults.
+export type ImageFit = 'contain' | 'cover';
+export type ImagePosition = 'left' | 'right';
+
+export function parseImageConfig(nodes: RootContent[]): {
+  imageFit: ImageFit | undefined;
+  imagePosition: ImagePosition | undefined;
+  filteredNodes: RootContent[];
+} {
+  let imageFit: ImageFit | undefined;
+  let imagePosition: ImagePosition | undefined;
+  const filteredNodes: RootContent[] = [];
+
+  for (const node of nodes) {
+    if (node.type === 'html') {
+      const val = node.value.trim();
+      const fitMatch = val.match(/^<!--\s*imageFit:\s*(\w+)\s*-->$/i);
+      if (fitMatch) {
+        const kind = fitMatch[1]!.toLowerCase();
+        if (VALID_IMAGE_FITS.has(kind)) {
+          imageFit = kind as ImageFit;
+        } else {
+          emitWarning(
+            `[mdslide compiler] Warning: Invalid imageFit "${kind}". Expected one of: ${[...VALID_IMAGE_FITS].join(', ')}. Ignoring.`
+          );
+        }
+        continue;
+      }
+      const positionMatch = val.match(/^<!--\s*imagePosition:\s*(\w+)\s*-->$/i);
+      if (positionMatch) {
+        const kind = positionMatch[1]!.toLowerCase();
+        if (VALID_IMAGE_POSITIONS.has(kind)) {
+          imagePosition = kind as ImagePosition;
+        } else {
+          emitWarning(
+            `[mdslide compiler] Warning: Invalid imagePosition "${kind}". Expected one of: ${[...VALID_IMAGE_POSITIONS].join(', ')}. Ignoring.`
+          );
+        }
+        continue;
+      }
+    }
+    filteredNodes.push(node);
+  }
+  return {
+    imageFit,
+    imagePosition,
+    filteredNodes,
+  };
+}
+
+// Finds accentColor comments and copies the CSS color value exactly. Does not validate the color syntax; invalid colors simply won't render.
+export function parseAccentColor(nodes: RootContent[]): {
+  accentColor: string | undefined;
+  filteredNodes: RootContent[];
+} {
+  let accentColor: string | undefined;
+  const filteredNodes: RootContent[] = [];
+
+  for (const node of nodes) {
+    if (node.type === 'html') {
+      const val = node.value.trim();
+      const match = val.match(/^<!--\s*accentColor:\s*(.+?)\s*-->$/i);
+      if (match) {
+        accentColor = match[1]!.trim();
+        continue;
+      }
+    }
+    filteredNodes.push(node);
+  }
+  return {
+    accentColor,
+    filteredNodes,
+  };
+}
+
+// Parses optional column count and ratio comments (e.g., <!-- columns: 3 ratio:2:1:1 -->). Only used to validate and refine the columns created by ::col:: markers. Triggers a warning if there is a count or ratio mismatch.
+export function parseColumnsConfig(nodes: RootContent[]): {
+  columnsConfig: { count?: number; ratio?: number[] } | undefined;
+  filteredNodes: RootContent[];
+} {
+  let columnsConfig: { count?: number; ratio?: number[] } | undefined;
+  const filteredNodes: RootContent[] = [];
+
+  for (const node of nodes) {
+    if (node.type === 'html') {
+      const val = node.value.trim();
+      const match = val.match(/^<!--\s*columns:\s*(\d+)(?:\s+ratio:([\d:]+))?\s*-->$/i);
+      if (match) {
+        const count = Number(match[1]);
+        const ratio = match[2] ? match[2].split(':').map(Number) : undefined;
+        columnsConfig = { count, ratio };
+        continue;
+      }
+    }
+    filteredNodes.push(node);
+  }
+  return {
+    columnsConfig,
+    filteredNodes,
+  };
+}
+
+// Finds chart comments (e.g., <!-- chart: bar -->) and pairs them with the next table node.
+// This is node-scoped (based on next-item adjacency), not slide-scoped.
+// Runs before column splitting so it works inside any future column or slide.
+
+const CHART_RE = /^<!--\s*chart:\s*(\w+)\s*-->$/i;
+
+export function parseChartAnnotations(nodes: RootContent[]): {
+  filteredNodes: RootContent[];
+} {
+  const filteredNodes: RootContent[] = [];
+  let pendingChart: string | undefined;
+
+  for (const node of nodes) {
+    if (node.type === 'html') {
+      const val = node.value.trim();
+      const match = val.match(CHART_RE);
+      if (match) {
+        const kind = match[1]!.toLowerCase();
+        if (VALID_CHART_TYPES.has(kind)) {
+          pendingChart = kind;
+        } else {
+          pendingChart = undefined;
+          emitWarning(
+            `[mdslide compiler] Warning: Invalid chart type "${kind}". Expected one of: ${[...VALID_CHART_TYPES].join(', ')}. Rendering as a plain table.`
+          );
+        }
+        continue;
+      }
+    }
+
+    if (pendingChart) {
+      if (node.type === 'table') {
+        filteredNodes.push({ ...node, chartHint: pendingChart } as RootContent);
+        pendingChart = undefined;
+        continue;
+      }
+      emitWarning(
+        `[mdslide compiler] Warning: "<!-- chart: ${pendingChart} -->" must immediately precede a table. Ignoring.`
+      );
+      pendingChart = undefined;
+    }
+
+    filteredNodes.push(node);
+  }
+
+  if (pendingChart) {
+    emitWarning(
+      `[mdslide compiler] Warning: "<!-- chart: ${pendingChart} -->" must immediately precede a table. Ignoring.`
+    );
+  }
+
+  return { filteredNodes };
 }
 
 export function parseOverflowConfig(nodes: RootContent[]): {
@@ -212,13 +430,14 @@ export function parseFontSizeConfig(nodes: RootContent[]): {
 export function resolveSlideLayout(
   nodes: SlideNode[],
   hasTitle: boolean,
-  layoutOverride?: string
+  layoutOverride?: string,
+  allowedTypes: ReadonlySet<SlideType> = VALID_SLIDE_TYPES
 ): SlideType {
   if (layoutOverride) {
-    if (VALID_SLIDE_TYPES.has(layoutOverride as SlideType)) {
+    if (allowedTypes.has(layoutOverride as SlideType)) {
       return layoutOverride as SlideType;
     }
-    console.warn(
+    emitWarning(
       `[mdslide compiler] Warning: Invalid layout override "${layoutOverride}". Falling back to auto-detection.`
     );
   }
