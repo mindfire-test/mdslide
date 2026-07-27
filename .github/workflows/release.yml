@@ -117,6 +117,14 @@ jobs:
         id: version
         run: echo "version=$(node -p 'require("./packages/cli/package.json").version')" >> $GITHUB_OUTPUT
 
+      - name: Generate checksums
+        working-directory: binaries
+        run: |
+          for f in *; do
+            sha256sum "$f" | awk '{print $1}' > "${f}.sha256"
+          done
+          ls -la
+
       - name: Upload binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
