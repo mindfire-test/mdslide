@@ -2,6 +2,38 @@
 
 The core compilation, normalization, and rendering engine for `mdslide`. It orchestrates the transformation of a parsed Markdown AST into interactive, styled slide decks.
 
+## Quick Start
+
+Install the package:
+
+```bash
+npm install @mindfiredigital/mdslide-core
+# or
+bun add @mindfiredigital/mdslide-core
+```
+
+Use the `Compiler` class to compile a Markdown string into an HTML slide deck:
+
+```typescript
+import { Compiler } from '@mindfiredigital/mdslide-core';
+
+const compiler = new Compiler();
+const html = await compiler.compile(`
+# Hello World
+
+Welcome to mdslide!
+
+---
+
+## Slide Two
+
+- Bullet one
+- Bullet two
+`);
+
+console.log(html); // Full HTML presentation output
+```
+
 ## Compiler Architecture & Pipeline Flow
 
 The compilation process is managed by the central `Compiler` class and flows through the following pipeline:
@@ -70,7 +102,17 @@ To prevent contents from bleeding out of the viewport, the overflow engine calcu
 
 Injects styling systems:
 
-- Resolves base styles (like 1080p slide margins, transitions, and docks) and integrates custom CSS variables for predefined themes (`light`, `dark`, `notion`, `terminal`, `gradient`, `corporate`, `solarized`).
+- Resolves base styles (like 1080p slide margins, transitions, and docks) and integrates custom CSS variables for predefined themes:
+
+| Theme        | Description                                              |
+|--------------|----------------------------------------------------------|
+| `light`      | Clean white background with dark text. Default theme.   |
+| `dark`       | Dark background with light text for low-light settings. |
+| `notion`     | Minimal, Notion-inspired serif typography.               |
+| `terminal`   | Monospace green-on-black terminal aesthetic.             |
+| `gradient`   | Vibrant gradient backgrounds with bold typography.       |
+| `corporate`  | Professional, neutral palette for business presentations.|
+| `solarized`  | Warm solarized color scheme, easy on the eyes.          |
 
 ---
 
