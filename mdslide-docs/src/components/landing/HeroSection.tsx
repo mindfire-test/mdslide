@@ -5,7 +5,7 @@ import TypingTerminal from './TypingTerminal';
 
 export default function HeroSection(): React.ReactElement {
   return (
-    <header className="pt-[140px] pb-[100px] px-10 relative overflow-hidden bg-app-bg">
+    <header className="pt-[100px] pb-[60px] px-6 md:pt-[140px] md:pb-[100px] md:px-10 relative overflow-hidden bg-app-bg">
       <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row items-center text-center lg:text-left gap-12 lg:gap-[60px] z-10 relative">
         <div className="flex-1 flex flex-col items-center lg:items-start">
           {/* <div className="inline-flex items-center font-mono text-[11px] font-medium tracking-[0.08em] uppercase text-app-accent border border-current rounded-full px-3 py-1 mb-6 bg-app-accent/5">

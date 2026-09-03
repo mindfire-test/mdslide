@@ -38,7 +38,7 @@ export default function TypingTerminal(): React.ReactElement {
   }, [step, charIndex]);
 
   return (
-    <div className="flex-[1.1] bg-[#0E0E0D] border border-app-border rounded-lg overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] flex flex-col h-[280px] min-w-[320px]">
+    <div className="hidden lg:flex flex-[1.1] bg-[#0E0E0D] border border-app-border rounded-lg overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] flex-col h-[280px] min-w-[320px]">
       <div className="h-9 bg-white/5 border-b border-app-border flex items-center px-4 relative">
         <div className="flex gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
