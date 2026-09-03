@@ -73,6 +73,21 @@ Once installed, you can use the `mdslide` command to compile and preview present
 
 ---
 
+## 🤖 Built for AI Agents
+
+`mdslide` is specifically designed to be extremely friendly for LLMs and autonomous AI agents to generate high-quality presentations programmatically.
+
+### Why mdslide is great for AI Agents:
+
+- **Self-Documenting for LLMs:** The `mdslide llms` command dumps the complete syntax and CLI reference in a single, token-optimized text block, allowing an agent to instantly learn the schema and constraints.
+- **Zero-Config Markdown:** Agents only need to output standard Markdown and HTML comments, formats they are already highly proficient at.
+- **Predictable Slide Boundaries:** The `<!-- slide -->` marker acts as a hard, explicit boundary, ensuring agents don't accidentally merge slides due to unpredictable heading hierarchies.
+- **Visual Validation (No UI Required):** The `mdslide screenshot --json` command allows agents running in headless or CI environments to capture high-resolution snapshots of the generated deck and inspect them visually (e.g., via a Vision model) without needing to open a browser window.
+- **Machine-Readable Dry-Runs:** `mdslide inspect --json` gives agents deterministic JSON feedback on resolved slide heights, detected layouts, and potential overflow issues, allowing them to self-correct text length before compiling.
+- **Deterministic Layouts:** Using structured annotations like `<!-- layout: split -->` or `<!-- columns: 3 -->`, agents can predictably force visual layouts instead of blindly guessing how a slide will render.
+
+---
+
 ## Exporting Presentations (PDF & PPTX)
 
 `mdslide` compiles your presentation directly to offline document formats via CLI arguments.

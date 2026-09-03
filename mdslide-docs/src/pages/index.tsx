@@ -9,6 +9,7 @@ import InstallSection from '../components/landing/InstallSection';
 import DemoWidget from '../components/landing/DemoWidget';
 import FeaturesSection from '../components/landing/FeaturesSection';
 import CliSection from '../components/landing/CliSection';
+import AgentSection from '../components/landing/AgentSection';
 import FooterSection from '../components/landing/FooterSection';
 import { fetchStars, copyToClipboard } from '../utils';
 
@@ -85,6 +86,7 @@ function HomepageContent(): ReactNode {
         onToggleTheme={handleToggleTheme}
       />
       <HeroSection />
+      <AgentSection />
       <InstallSection />
       <DemoWidget isDark={isDark} />
       <FeaturesSection />
