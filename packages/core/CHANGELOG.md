@@ -1,5 +1,11 @@
 # @mindfiredigital/mdslide-core
 
+## 0.0.3
+
+### Patch Changes
+
+- 44b2cfd: core: expand theme engine docs and fix auto-changeset workflow
+
 ## 0.0.2
 
 ### Patch Changes

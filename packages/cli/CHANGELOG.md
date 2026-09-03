@@ -1,5 +1,12 @@
 # @mindfiredigital/mdslide-cli
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [44b2cfd]
+  - @mindfiredigital/mdslide-core@0.0.3
+
 ## 1.0.1
 
 ### Patch Changes
